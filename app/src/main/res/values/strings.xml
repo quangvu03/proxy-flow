@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProxyFlow</string>
+
+    <!-- Navigation -->
+    <string name="nav_connect">Kết nối</string>
+    <string name="nav_proxies">Danh sách</string>
+    <string name="nav_ip_check">Kiểm tra IP</string>
+    <string name="nav_apps">Ứng dụng</string>
+    <string name="nav_logs">Nhật ký</string>
+
+    <!-- Header & Status -->
+    <string name="app_subtitle">Trình quản lý &amp; kết nối Proxy HTTP cố định</string>
+    <string name="status_disconnected">Chưa kết nối</string>
+    <string name="status_connecting">Đang khởi tạo VPN…</string>
+    <string name="status_connected">Đang bảo vệ &amp; định tuyến</string>
+    <string name="status_error">Lỗi kết nối</string>
+
+    <!-- Dashboard -->
+    <string name="action_connect">Kết nối Proxy</string>
+    <string name="action_disconnect">Ngắt kết nối</string>
+    <string name="action_test_active">Kiểm tra IP &amp; Ping</string>
+    <string name="label_active_proxy">Proxy đang chọn</string>
+    <string name="label_no_proxy_selected">Chưa có Proxy nào được chọn</string>
+    <string name="label_select_or_add_hint">Vào tab Danh sách để thêm hoặc chọn Proxy HTTP</string>
+    <string name="label_local_gateway">Cổng cục bộ: 127.0.0.1:%1$d</string>
+    <string name="label_exit_ip">IP đầu ra</string>
+    <string name="label_latency">Độ trễ</string>
+    <string name="label_auth_status">Xác thực</string>
+    <string name="label_bytes_sent">Đã gửi</string>
+    <string name="label_bytes_received">Đã nhận</string>
+    <string name="label_active_conns">Phiên TCP</string>
+    <string name="label_uptime">Thời gian</string>
+    <string name="label_manual_fixed_ip">Giữ IP cố định</string>
+    <string name="label_saved_proxies_count">Danh sách đã lưu (%1$d Proxy)</string>
+    <string name="label_manual_mode_desc">Chế độ thủ công • Chỉ đổi Proxy khi bạn tự chọn</string>
+    <string name="label_go_to_list">Quản lý</string>
+
+    <!-- Proxy List -->
+    <string name="hint_search_proxy">Tìm theo tên, IP hoặc quốc gia…</string>
+    <string name="filter_all">Tất cả</string>
+    <string name="filter_online">Hoạt động</string>
+    <string name="action_add_proxy">Thêm Proxy</string>
+    <string name="action_test_all">Kiểm tra tất cả</string>
+    <string name="action_import_bulk">Nhập nhanh</string>
+    <string name="action_export_all">Sao chép DS</string>
+    <string name="empty_proxy_title">Danh sách Proxy đang trống</string>
+    <string name="empty_proxy_subtitle">Thêm Proxy HTTP (host, port, user, pass) hoặc nhập hàng loạt để lưu trữ và tự chọn kết nối cố định.</string>
+    <string name="badge_auth_yes">User/Pass</string>
+    <string name="badge_auth_no">Không Auth</string>
+    <string name="badge_active_now">Đang dùng</string>
+    <string name="latency_untested">Chưa đo</string>
+    <string name="latency_failed">Lỗi</string>
+    <string name="latency_ms">%1$d ms</string>
+    <string name="desc_test_proxy">Kiểm tra proxy</string>
+    <string name="desc_edit_proxy">Chỉnh sửa proxy</string>
+    <string name="desc_delete_proxy">Xóa proxy</string>
+
+    <!-- Add / Edit Proxy Sheet -->
+    <string name="title_add_proxy">Thêm Proxy HTTP</string>
+    <string name="title_edit_proxy">Cập nhật Proxy</string>
+    <string name="hint_proxy_name">Tên gợi nhớ (VD: US East 1)</string>
+    <string name="hint_proxy_host">Địa chỉ HTTP / Host (VD: 192.168.1.10)</string>
+    <string name="hint_proxy_port">Cổng / Port (VD: 8080)</string>
+    <string name="hint_proxy_user">Tài khoản / Username (tùy chọn)</string>
+    <string name="hint_proxy_pass">Mật khẩu / Password (tùy chọn)</string>
+    <string name="action_paste_parse">Dán &amp; tự tách (ip:port:user:pass)</string>
+    <string name="action_save">Lưu Proxy</string>
+    <string name="action_cancel">Hủy</string>
+    <string name="error_host_required">Vui lòng nhập địa chỉ HTTP / IP</string>
+    <string name="error_port_invalid">Cổng phải từ 1 đến 65535</string>
+    <string name="msg_clipboard_parsed">Đã tự động điền từ Clipboard</string>
+    <string name="msg_clipboard_invalid">Không nhận dạng được định dạng ip:port[:user:pass]</string>
+
+    <!-- Bulk Import Dialog -->
+    <string name="title_import_bulk">Nhập danh sách Proxy</string>
+    <string name="hint_import_bulk">Mỗi dòng 1 proxy theo định dạng:\nhost:port:user:pass\nhoặc http://user:pass@host:port\nhoặc host:port</string>
+    <string name="action_import_confirm">Nhập vào danh sách</string>
+    <string name="msg_imported_count">Đã thêm %1$d Proxy mới</string>
+    <string name="msg_exported_copied">Đã sao chép %1$d Proxy vào Clipboard</string>
+    <string name="msg_no_proxies_to_export">Chưa có Proxy nào để sao chép</string>
+
+    <!-- Fixed-IP Mode & Logs -->
+    <string name="title_fixed_ip_policy">Chế độ IP cố định (Thủ công)</string>
+    <string name="desc_fixed_ip_policy">Ứng dụng không tự động đổi hay xoay vòng Proxy. IP của bạn luôn được giữ cố định cho đến khi bạn tự chọn sang một Proxy khác trong danh sách, giúp tránh kích hoạt bảo mật trên các ứng dụng.</string>
+    <string name="title_logs_section">Nhật ký kết nối</string>
+    <string name="action_clear_logs">Xóa nhật ký</string>
+    <string name="empty_logs_hint">Chưa có sự kiện kết nối nào.</string>
+
+    <!-- Notifications & Messages -->
+    <string name="notif_channel_name">Trạng thái Proxy VPN</string>
+    <string name="notif_channel_desc">Hiển thị trạng thái kết nối Proxy VPN cố định</string>
+    <string name="notif_title_connected">ProxyFlow đang chạy • %1$s</string>
+    <string name="notif_text_connected">Cổng cục bộ :%1$d • %2$s</string>
+    <string name="notif_action_stop">Ngắt</string>
+    <string name="msg_no_proxy_to_connect">Hãy thêm ít nhất 1 Proxy trước khi kết nối</string>
+    <string name="msg_vpn_permission_denied">Cần cấp quyền VPN để định tuyến Proxy hệ thống</string>
+    <string name="msg_delete_confirm_title">Xóa Proxy này?</string>
+    <string name="msg_delete_confirm_body">Bạn có chắc muốn xóa %1$s khỏi danh sách lưu trữ?</string>
+    <string name="action_delete">Xóa</string>
+    <string name="msg_testing_all">Đang kiểm tra %1$d Proxy…</string>
+    <string name="msg_proxy_saved">Đã lưu Proxy thành công</string>
+
+    <!-- IP Checker & Map -->
+    <string name="action_check_ip_now">Kiểm tra IP ngay</string>
+    <string name="action_open_ip_map">Xem IP &amp; Bản đồ</string>
+    <string name="label_ip_map_title">Bản đồ vị trí IP đang sử dụng</string>
+    <string name="label_focus_current_ip">IP đang dùng</string>
+    <string name="label_focus_origin_ip">IP gốc</string>
+    <string name="label_focus_both_ip">Xem cả hai</string>
+    <string name="label_current_ip_section">IP Hiện Tại (Đang sử dụng)</string>
+    <string name="label_origin_ip_section">IP Gốc (Mạng thực của thiết bị)</string>
+    <string name="badge_proxy_routed">Đang định tuyến qua Proxy</string>
+    <string name="badge_direct_network">Mạng gốc trực tiếp</string>
+    <string name="badge_ip_masked">Đã ẩn IP gốc an toàn</string>
+    <string name="badge_ip_exposed">Đang trùng IP gốc (Chưa bật Proxy)</string>
+    <string name="label_ipv4">Địa chỉ IPv4</string>
+    <string name="label_ipv6">Địa chỉ IPv6</string>
+    <string name="label_region_province">Tỉnh / Khu vực</string>
+    <string name="label_city">Thành phố</string>
+    <string name="label_country">Quốc gia</string>
+    <string name="label_isp">Nhà mạng (ISP)</string>
+    <string name="label_coordinates">Tọa độ</string>
+    <string name="ip_checking_loading">Đang kiểm tra…</string>
+    <string name="ip_not_available">Không hỗ trợ / Chưa có</string>
+    <string name="msg_ip_copied">Đã sao chép địa chỉ IP vào Clipboard</string>
+    <string name="msg_ip_check_failed">Không thể kiểm tra một phần thông tin IP: %1$s</string>
+    <string name="label_checking_progress">Đang truy vấn IPv4, IPv6 và tọa độ địa lý…</string>
+
+    <!-- Proxy Detail & Speed Test -->
+    <string name="action_inspect_proxy">Kiểm tra</string>
+    <string name="title_proxy_detail">Chi tiết &amp; Kiểm tra Proxy</string>
+    <string name="verdict_testing">Đang kiểm tra Proxy…</string>
+    <string name="verdict_testing_sub">Đang kiểm tra kết nối TCP, xác thực, tốc độ mạng và IP đầu ra…</string>
+    <string name="verdict_usable">CÓ THỂ SỬ DỤNG</string>
+    <string name="verdict_usable_sub">Proxy hoạt động ổn định, sẵn sàng kết nối cố định.</string>
+    <string name="verdict_unusable">KHÔNG XÀI ĐƯỢC</string>
+    <string name="verdict_unusable_sub">Proxy không phản hồi hoặc xác thực thất bại.</string>
+    <string name="action_retest_all">Kiểm tra lại</string>
+    <string name="action_connect_this_proxy">Kết nối Proxy này</string>
+    <string name="section_diagnostics">Kiểm tra kỹ thuật</string>
+    <string name="diag_tcp_connect">Kết nối TCP (%1$s)</string>
+    <string name="diag_auth_check">Xác thực User / Pass</string>
+    <string name="diag_https_tunnel">Đường hầm HTTPS (CONNECT)</string>
+    <string name="diag_status_pending">Đang chờ…</string>
+    <string name="diag_status_ok">Đạt</string>
+    <string name="diag_status_fail">Thất bại</string>
+    <string name="diag_auth_none">Không yêu cầu Auth</string>
+    <string name="diag_auth_ok">Xác thực hợp lệ</string>
+    <string name="diag_auth_failed">Sai tài khoản / mật khẩu (407)</string>
+    <string name="section_speed_test">Đo tốc độ mạng qua Proxy</string>
+    <string name="action_run_speed_test">Đo tốc độ lại</string>
+    <string name="label_speed_ping">Ping TB</string>
+    <string name="label_speed_download">Tải xuống</string>
+    <string name="label_speed_upload">Tải lên</string>
+    <string name="label_speed_testing">Đang đo băng thông tải xuống / tải lên qua Proxy…</string>
+    <string name="label_speed_done">Hoàn tất đo tốc độ thực tế qua Proxy</string>
+    <string name="label_speed_failed">Không thể đo băng thông do Proxy lỗi kết nối</string>
+    <string name="section_proxy_ip_geo">Kiểm tra IP &amp; Vị trí Proxy</string>
+
+    <!-- Installed Apps & Per-App Proxy Control -->
+    <string name="title_app_proxy_card">Ứng dụng sử dụng Proxy</string>
+    <string name="action_select_apps">Chọn App</string>
+    <string name="label_app_rules_all_via_proxy">Tất cả ứng dụng đang dùng Proxy</string>
+    <string name="label_app_rules_block_summary">Đang chặn %1$d ứng dụng không dùng Proxy</string>
+    <string name="label_app_rules_allow_summary">Chỉ cho phép %1$d ứng dụng dùng Proxy</string>
+    <string name="title_app_proxy_screen">Kiểm tra &amp; chọn ứng dụng dùng Proxy</string>
+    <string name="label_scanning_apps">Đang quét ứng dụng trên thiết bị…</string>
+    <string name="label_apps_scan_summary">Tìm thấy %1$d ứng dụng • %2$d ứng dụng có quyền Internet</string>
+    <string name="desc_rescan_apps">Quét lại danh sách ứng dụng</string>
+    <string name="app_mode_block_selected">Chặn không dùng Proxy</string>
+    <string name="app_mode_allow_selected">Chỉ cho phép dùng Proxy</string>
+    <string name="app_mode_block_hint">Các ứng dụng được tích sẽ chạy mạng gốc (không qua Proxy). Các ứng dụng khác vẫn qua Proxy.</string>
+    <string name="app_mode_allow_hint">Chỉ các ứng dụng được tích mới chạy qua Proxy. Toàn bộ ứng dụng còn lại đi mạng gốc.</string>
+    <string name="msg_app_rules_pending_apply">Quy tắc ứng dụng đã thay đổi trong lúc VPN đang bật</string>
+    <string name="action_apply_now">Áp dụng ngay</string>
+    <string name="msg_app_rules_applied">Đã cập nhật quy tắc ứng dụng vào VPN</string>
+    <string name="hint_search_apps">Tìm tên ứng dụng hoặc package…</string>
+    <string name="filter_apps_user">Người dùng</string>
+    <string name="filter_apps_system">Hệ thống</string>
+    <string name="filter_apps_checked">Đã tích</string>
+    <string name="label_apps_block_count">Đã tích chặn: %1$d ứng dụng</string>
+    <string name="label_apps_allow_count">Đã tích cho phép: %1$d ứng dụng</string>
+    <string name="action_select_all">Tích hết</string>
+    <string name="action_clear_selection">Bỏ tích</string>
+    <string name="empty_apps_hint">Không tìm thấy ứng dụng phù hợp.</string>
+    <string name="desc_app_icon">Biểu tượng ứng dụng</string>
+    <string name="desc_toggle_app_proxy">Tích cho phép hoặc chặn ứng dụng dùng Proxy</string>
+    <string name="badge_app_user">Người dùng</string>
+    <string name="badge_app_system">Hệ thống</string>
+    <string name="badge_app_internet_yes">Có Internet</string>
+    <string name="badge_app_internet_no">Không Internet</string>
+    <string name="badge_app_via_proxy">Qua Proxy</string>
+    <string name="badge_app_bypass_proxy">Chặn Proxy</string>
+</resources>
