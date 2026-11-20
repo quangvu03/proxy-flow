@@ -52,4 +52,22 @@ public class ProxyDatabaseTest {
         assertTrue(db.getAllProxies().isEmpty());
         db.close();
     }
+
+    @Test
+    public void appSettingsTable_persistsAndUpdatesValues() {
+        Context context = ApplicationProvider.getApplicationContext();
+        ProxyDatabaseHelper db = new ProxyDatabaseHelper(context);
+
+        assertEquals("default", db.getSetting("custom_key", "default"));
+        db.putSetting("custom_key", "DARK");
+        assertTrue(db.hasSetting("custom_key"));
+        assertEquals("DARK", db.getSetting("custom_key", "default"));
+
+        db.putSetting("custom_key", "LIGHT");
+        assertEquals("LIGHT", db.getSetting("custom_key", "default"));
+
+        db.deleteSetting("custom_key");
+        assertEquals("default", db.getSetting("custom_key", "default"));
+        db.close();
+    }
 }

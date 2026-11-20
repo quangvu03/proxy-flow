@@ -22,16 +22,17 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.example.data.SettingsPreferences;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
 import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyVpnService;
 import com.example.ui.AppProxyFragment;
 import com.example.ui.ConnectFragment;
-import com.example.ui.IpCheckFragment;
 import com.example.ui.LogsFragment;
 import com.example.ui.ProxyListFragment;
 import com.example.ui.ProxyViewModel;
+import com.example.ui.SettingsFragment;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.navigationrail.NavigationRailView;
@@ -74,6 +75,13 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         viewModel = new ViewModelProvider(this).get(ProxyViewModel.class);
 
         MaterialToolbar toolbar = findViewById(R.id.top_app_bar);
+        toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_settings) {
+                onNavigateToTab(R.id.nav_settings);
+                return true;
+            }
+            return false;
+        });
         bottomNav = findViewById(R.id.bottom_navigation);
         navRail = findViewById(R.id.navigation_rail);
 
@@ -129,6 +137,15 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        SettingsPreferences settingsPrefs = new SettingsPreferences(this);
+        if (settingsPrefs.getThemeMode() == SettingsPreferences.ThemeMode.SYSTEM_TIME) {
+            SettingsPreferences.applyThemeMode(SettingsPreferences.ThemeMode.SYSTEM_TIME);
+        }
+    }
+
+    @Override
     protected void onSaveInstanceState(@androidx.annotation.NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt("current_tab", currentTabId);
@@ -139,13 +156,14 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         Fragment target;
         if (itemId == R.id.nav_proxies) {
             target = new ProxyListFragment();
-        } else if (itemId == R.id.nav_ip_check) {
-            target = new IpCheckFragment();
-        } else if (itemId == R.id.nav_apps) {
-            target = new AppProxyFragment();
         } else if (itemId == R.id.nav_logs) {
             target = new LogsFragment();
+        } else if (itemId == R.id.nav_apps) {
+            target = new AppProxyFragment();
+        } else if (itemId == R.id.nav_settings) {
+            target = new SettingsFragment();
         } else {
+            currentTabId = R.id.nav_connect;
             target = new ConnectFragment();
         }
         getSupportFragmentManager()

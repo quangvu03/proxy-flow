@@ -32,8 +32,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Fragment in 100% Java allowing the user to inspect all installed apps on the device
- * and check/uncheck which apps are allowed or blocked from using the active Proxy.
+ * Fragment in 100% Java with a compact header and single-checkbox routing control:
+ * Checked = App uses Proxy, Unchecked = App does NOT use Proxy (runs on direct network).
  */
 public class AppProxyFragment extends Fragment implements InstalledAppAdapter.OnAppToggleListener {
 
@@ -42,8 +42,6 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
 
     private TextView tvScanSummary;
     private ImageButton btnRescan;
-    private ChipGroup chipGroupMode;
-    private TextView tvModeHint;
     private MaterialCardView cardPendingApply;
     private MaterialButton btnApplyNow;
     private TextInputEditText etSearch;
@@ -59,8 +57,7 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
     private List<InstalledAppInfo> filteredApps = new ArrayList<>();
     private AppProxyRule currentRule = new AppProxyRule(AppProxyRule.Mode.BLOCK_SELECTED, Collections.emptySet());
     private String searchQuery = "";
-    private int filterMode = 0; // 0 = all, 1 = user, 2 = system, 3 = checked
-    private boolean bindingMode = false;
+    private int filterMode = 0; // 0 = all, 1 = user, 2 = system, 3 = bypassed (unchecked)
 
     @Nullable
     @Override
@@ -76,8 +73,6 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
 
         tvScanSummary = view.findViewById(R.id.tv_apps_scan_summary);
         btnRescan = view.findViewById(R.id.btn_rescan_apps);
-        chipGroupMode = view.findViewById(R.id.chip_group_app_mode);
-        tvModeHint = view.findViewById(R.id.tv_app_mode_hint);
         cardPendingApply = view.findViewById(R.id.card_apply_app_rules);
         btnApplyNow = view.findViewById(R.id.btn_apply_app_rules);
         etSearch = view.findViewById(R.id.et_search_apps);
@@ -94,16 +89,6 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
         recyclerApps.setAdapter(adapter);
 
         btnRescan.setOnClickListener(v -> viewModel.scanInstalledApps());
-
-        chipGroupMode.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (bindingMode || checkedIds.isEmpty()) return;
-            int id = checkedIds.get(0);
-            if (id == R.id.chip_mode_allow_selected) {
-                viewModel.setAppFilterMode(AppProxyRule.Mode.ALLOW_SELECTED);
-            } else {
-                viewModel.setAppFilterMode(AppProxyRule.Mode.BLOCK_SELECTED);
-            }
-        });
 
         btnApplyNow.setOnClickListener(v -> {
             viewModel.applyAppRulesToRunningVpn();
@@ -124,7 +109,7 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
                 filterMode = 1;
             } else if (checkedIds.contains(R.id.chip_apps_system)) {
                 filterMode = 2;
-            } else if (checkedIds.contains(R.id.chip_apps_checked)) {
+            } else if (checkedIds.contains(R.id.chip_apps_bypassed)) {
                 filterMode = 3;
             } else {
                 filterMode = 0;
@@ -132,15 +117,23 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
             applyFilter();
         });
 
+        // "Tích hết" = all visible apps USE Proxy
         btnSelectAllVisible.setOnClickListener(v -> {
             List<String> pkgs = new ArrayList<>(filteredApps.size());
             for (InstalledAppInfo info : filteredApps) {
                 pkgs.add(info.getPackageName());
             }
-            viewModel.setMultipleAppsChecked(pkgs, true);
+            viewModel.setMultipleAppsUseProxy(pkgs, true);
         });
 
-        btnClearAll.setOnClickListener(v -> viewModel.clearSelectedApps());
+        // "Bỏ tích" = all visible apps DO NOT use Proxy
+        btnClearAll.setOnClickListener(v -> {
+            List<String> pkgs = new ArrayList<>(filteredApps.size());
+            for (InstalledAppInfo info : filteredApps) {
+                pkgs.add(info.getPackageName());
+            }
+            viewModel.setMultipleAppsUseProxy(pkgs, false);
+        });
 
         viewModel.getInstalledApps().observe(getViewLifecycleOwner(), list -> {
             allApps = list != null ? list : new ArrayList<>();
@@ -152,7 +145,7 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
             if (rule != null) {
                 currentRule = rule;
                 adapter.setAppProxyRule(rule);
-                renderRuleHeader(rule);
+                updateSummaryCounts();
                 if (filterMode == 3) {
                     applyFilter();
                 }
@@ -175,35 +168,24 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
         }
     }
 
-    private void renderRuleHeader(AppProxyRule rule) {
-        bindingMode = true;
-        try {
-            if (rule.getMode() == AppProxyRule.Mode.ALLOW_SELECTED) {
-                chipGroupMode.check(R.id.chip_mode_allow_selected);
-                tvModeHint.setText(R.string.app_mode_allow_hint);
-            } else {
-                chipGroupMode.check(R.id.chip_mode_block_selected);
-                tvModeHint.setText(R.string.app_mode_block_hint);
-            }
-        } finally {
-            bindingMode = false;
-        }
-        updateSummaryCounts();
-    }
-
     private void updateSummaryCounts() {
         int total = allApps.size();
-        int withInternet = 0;
+        int usingProxy = 0;
+        int bypassed = 0;
         for (InstalledAppInfo app : allApps) {
-            if (app.hasInternetPermission()) withInternet++;
+            if (currentRule.doesAppUseProxy(app.getPackageName())) {
+                usingProxy++;
+            } else {
+                bypassed++;
+            }
         }
-        tvScanSummary.setText(getString(R.string.label_apps_scan_summary, total, withInternet));
-
-        int checkedCount = currentRule.getSelectedPackages().size();
-        if (currentRule.getMode() == AppProxyRule.Mode.ALLOW_SELECTED) {
-            tvCheckedCount.setText(getString(R.string.label_apps_allow_count, checkedCount));
+        tvScanSummary.setText(R.string.hint_app_checkbox_rule);
+        if (total == 0) {
+            tvCheckedCount.setText(R.string.label_scanning_apps);
+        } else if (bypassed == 0) {
+            tvCheckedCount.setText(getString(R.string.label_apps_all_checked_count, total));
         } else {
-            tvCheckedCount.setText(getString(R.string.label_apps_block_count, checkedCount));
+            tvCheckedCount.setText(getString(R.string.label_apps_using_and_bypassed_count, usingProxy, bypassed));
         }
     }
 
@@ -212,7 +194,7 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
         for (InstalledAppInfo app : allApps) {
             if (filterMode == 1 && app.isSystemApp()) continue;
             if (filterMode == 2 && !app.isSystemApp()) continue;
-            if (filterMode == 3 && !currentRule.isPackageChecked(app.getPackageName())) continue;
+            if (filterMode == 3 && currentRule.doesAppUseProxy(app.getPackageName())) continue;
 
             if (!searchQuery.isEmpty()) {
                 String hay = (app.getAppName() + " " + app.getPackageName()).toLowerCase(Locale.ROOT);
@@ -228,7 +210,7 @@ public class AppProxyFragment extends Fragment implements InstalledAppAdapter.On
     }
 
     @Override
-    public void onAppToggled(InstalledAppInfo app, boolean checked) {
-        viewModel.setAppChecked(app.getPackageName(), checked);
+    public void onAppProxyToggled(InstalledAppInfo app, boolean useProxy) {
+        viewModel.setAppUsesProxy(app.getPackageName(), useProxy);
     }
 }

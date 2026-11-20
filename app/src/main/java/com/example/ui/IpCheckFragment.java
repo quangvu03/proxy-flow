@@ -8,7 +8,6 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
@@ -28,15 +27,12 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 
-import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
 
-import java.io.File;
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -51,6 +47,8 @@ public class IpCheckFragment extends Fragment {
 
     private MapView mapView;
     private TextView tvMapOverlayLocation;
+    private ImageButton btnMapZoomIn;
+    private ImageButton btnMapZoomOut;
     private FloatingActionButton fabRefreshIp;
     private ChipGroup chipGroupFocus;
     private LinearProgressIndicator progressIpCheck;
@@ -84,7 +82,7 @@ public class IpCheckFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        initOsmdroidConfig(requireContext());
+        MapHelper.initConfig(requireContext());
         return inflater.inflate(R.layout.fragment_ip_check, container, false);
     }
 
@@ -96,6 +94,8 @@ public class IpCheckFragment extends Fragment {
 
         mapView = view.findViewById(R.id.map_ip_location);
         tvMapOverlayLocation = view.findViewById(R.id.tv_map_overlay_location);
+        btnMapZoomIn = view.findViewById(R.id.btn_map_zoom_in);
+        btnMapZoomOut = view.findViewById(R.id.btn_map_zoom_out);
         fabRefreshIp = view.findViewById(R.id.fab_refresh_ip);
         chipGroupFocus = view.findViewById(R.id.chip_group_map_focus);
         progressIpCheck = view.findViewById(R.id.progress_ip_check);
@@ -123,6 +123,7 @@ public class IpCheckFragment extends Fragment {
         btnCopyOriginIpv6 = view.findViewById(R.id.btn_copy_origin_ipv6);
 
         setupMapView();
+        MapHelper.attachZoomControls(mapView, btnMapZoomIn, btnMapZoomOut);
 
         View.OnClickListener refreshClick = v -> viewModel.refreshIpComparison();
         fabRefreshIp.setOnClickListener(refreshClick);
@@ -166,24 +167,8 @@ public class IpCheckFragment extends Fragment {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     private void setupMapView() {
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
-        mapView.setMultiTouchControls(true);
-        mapView.getController().setZoom(5.0);
-        // Default initial center (Vietnam / Southeast Asia) until coordinates load
-        mapView.getController().setCenter(new GeoPoint(16.0544, 108.2022));
-
-        // Allow panning/zooming the map smoothly inside NestedScrollView
-        mapView.setOnTouchListener((v, event) -> {
-            int action = event.getAction();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                v.getParent().requestDisallowInterceptTouchEvent(true);
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                v.getParent().requestDisallowInterceptTouchEvent(false);
-            }
-            return false;
-        });
+        MapHelper.configureMapView(requireContext(), mapView, 5.5);
     }
 
     private void renderResult(IpDetails.IpComparisonResult result) {
@@ -246,6 +231,7 @@ public class IpCheckFragment extends Fragment {
 
     private void renderMapMarkers(IpDetails current, IpDetails origin) {
         mapView.getOverlays().clear();
+        MapHelper.addVietnamSovereigntyOverlay(requireContext(), mapView);
 
         GeoPoint currentPoint = current.hasCoordinates()
                 ? new GeoPoint(current.getLatitude(), current.getLongitude())
@@ -257,14 +243,17 @@ public class IpCheckFragment extends Fragment {
         if (currentPoint != null && originPoint != null
                 && (Math.abs(currentPoint.getLatitude() - originPoint.getLatitude()) > 0.01
                 || Math.abs(currentPoint.getLongitude() - originPoint.getLongitude()) > 0.01)) {
-            Polyline line = new Polyline(mapView);
-            line.setPoints(Arrays.asList(originPoint, currentPoint));
-            line.getOutlinePaint().setColor(Color.parseColor("#0D9488"));
-            line.getOutlinePaint().setStrokeWidth(6f);
-            mapView.getOverlays().add(line);
+            MapHelper.addGoogleStyleRoute(mapView, originPoint, currentPoint);
         }
 
         if (originPoint != null) {
+            MapHelper.addPrecisionHalo(
+                    mapView,
+                    originPoint,
+                    600.0,
+                    Color.argb(38, 26, 115, 232),
+                    Color.argb(150, 26, 115, 232)
+            );
             Marker originMarker = new Marker(mapView);
             originMarker.setPosition(originPoint);
             originMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
@@ -275,6 +264,13 @@ public class IpCheckFragment extends Fragment {
         }
 
         if (currentPoint != null) {
+            MapHelper.addPrecisionHalo(
+                    mapView,
+                    currentPoint,
+                    600.0,
+                    Color.argb(40, 234, 67, 53),
+                    Color.argb(165, 234, 67, 53)
+            );
             Marker currentMarker = new Marker(mapView);
             currentMarker.setPosition(currentPoint);
             currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
@@ -302,8 +298,7 @@ public class IpCheckFragment extends Fragment {
                 : null;
 
         if (focusMode == 1 && originPoint != null) {
-            mapView.getController().setZoom(11.0);
-            mapView.getController().animateTo(originPoint);
+            MapHelper.focusOnPoint(mapView, originPoint, 14.5);
             tvMapOverlayLocation.setText(getString(R.string.label_focus_origin_ip) + ": " + origin.getLocationSummary());
         } else if (focusMode == 2 && currentPoint != null && originPoint != null) {
             double north = Math.max(currentPoint.getLatitude(), originPoint.getLatitude()) + 2.0;
@@ -316,15 +311,13 @@ public class IpCheckFragment extends Fragment {
                     Math.max(-85.0, south),
                     Math.max(-180.0, west)
             );
-            mapView.post(() -> mapView.zoomToBoundingBox(box, true, 64));
+            MapHelper.focusOnBounds(mapView, box, 64);
             tvMapOverlayLocation.setText(origin.getCountry() + " → " + current.getCountry());
         } else if (currentPoint != null) {
-            mapView.getController().setZoom(11.0);
-            mapView.getController().animateTo(currentPoint);
+            MapHelper.focusOnPoint(mapView, currentPoint, 14.5);
             tvMapOverlayLocation.setText(current.getLocationSummary());
         } else if (originPoint != null) {
-            mapView.getController().setZoom(11.0);
-            mapView.getController().animateTo(originPoint);
+            MapHelper.focusOnPoint(mapView, originPoint, 14.5);
             tvMapOverlayLocation.setText(origin.getLocationSummary());
         }
     }
@@ -351,19 +344,6 @@ public class IpCheckFragment extends Fragment {
         return details.getCountry() + " (" + details.getCountryCode() + ")";
     }
 
-    private static void initOsmdroidConfig(Context context) {
-        Context appCtx = context.getApplicationContext();
-        File osmBase = new File(appCtx.getCacheDir(), "osmdroid");
-        File osmTiles = new File(osmBase, "tiles");
-        if (!osmTiles.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            osmTiles.mkdirs();
-        }
-        Configuration.getInstance().setUserAgentValue(appCtx.getPackageName());
-        Configuration.getInstance().setOsmdroidBasePath(osmBase);
-        Configuration.getInstance().setOsmdroidTileCache(osmTiles);
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -378,5 +358,14 @@ public class IpCheckFragment extends Fragment {
             mapView.onPause();
         }
         super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (mapView != null) {
+            mapView.onDetach();
+            mapView = null;
+        }
+        super.onDestroyView();
     }
 }

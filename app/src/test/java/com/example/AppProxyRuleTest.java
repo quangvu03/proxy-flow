@@ -64,4 +64,20 @@ public class AppProxyRuleTest {
         assertTrue(loaded.isPackageChecked("com.example.browser"));
         assertTrue(loaded.isPackageChecked("com.example.chat"));
     }
+
+    @Test
+    public void singleCheckbox_uncheckedBypassesProxyAndCheckedUsesProxy() {
+        Context context = ApplicationProvider.getApplicationContext();
+        com.example.data.ProxyRepository repo = com.example.data.ProxyRepository.getInstance(context);
+
+        repo.setAppUsesProxy("com.bank.app", false);
+        AppProxyRule afterUncheck = repo.getAppProxyRule().getValue();
+        assertEquals(AppProxyRule.Mode.BLOCK_SELECTED, afterUncheck.getMode());
+        assertFalse(afterUncheck.doesAppUseProxy("com.bank.app"));
+        assertTrue(afterUncheck.doesAppUseProxy("com.android.chrome"));
+
+        repo.setAppUsesProxy("com.bank.app", true);
+        AppProxyRule afterRecheck = repo.getAppProxyRule().getValue();
+        assertTrue(afterRecheck.doesAppUseProxy("com.bank.app"));
+    }
 }

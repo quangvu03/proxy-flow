@@ -6,8 +6,8 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.os.Bundle;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -34,13 +34,10 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 
-import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 
-import java.io.File;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -91,11 +88,10 @@ public class ProxyDetailActivity extends AppCompatActivity {
     private TextView tvDetailIsp;
     private MapView mapView;
 
-    @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         EdgeToEdge.enable(this);
-        initOsmdroid(this);
+        MapHelper.initConfig(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_proxy_detail);
 
@@ -141,20 +137,10 @@ public class ProxyDetailActivity extends AppCompatActivity {
         ImageButton btnCopyIpv4 = findViewById(R.id.btn_copy_detail_ipv4);
         ImageButton btnCopyIpv6 = findViewById(R.id.btn_copy_detail_ipv6);
         mapView = findViewById(R.id.map_detail_proxy);
-
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
-        mapView.setMultiTouchControls(true);
-        mapView.getController().setZoom(4.0);
-        mapView.getController().setCenter(new GeoPoint(16.0544, 108.2022));
-        mapView.setOnTouchListener((v, event) -> {
-            int action = event.getAction();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                v.getParent().requestDisallowInterceptTouchEvent(true);
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                v.getParent().requestDisallowInterceptTouchEvent(false);
-            }
-            return false;
-        });
+        ImageButton btnDetailZoomIn = findViewById(R.id.btn_detail_zoom_in);
+        ImageButton btnDetailZoomOut = findViewById(R.id.btn_detail_zoom_out);
+        MapHelper.configureMapView(this, mapView, 5.2);
+        MapHelper.attachZoomControls(mapView, btnDetailZoomIn, btnDetailZoomOut);
 
         long proxyId = getIntent().getLongExtra(EXTRA_PROXY_ID, -1L);
         if (proxyId <= 0) {
@@ -381,8 +367,16 @@ public class ProxyDetailActivity extends AppCompatActivity {
         tvDetailIsp.setText(ip.getIsp().isEmpty() ? "—" : ip.getIsp());
 
         mapView.getOverlays().clear();
+        MapHelper.addVietnamSovereigntyOverlay(this, mapView);
         if (ip.hasCoordinates()) {
             GeoPoint pt = new GeoPoint(ip.getLatitude(), ip.getLongitude());
+            MapHelper.addPrecisionHalo(
+                    mapView,
+                    pt,
+                    600.0,
+                    Color.argb(40, 234, 67, 53),
+                    Color.argb(165, 234, 67, 53)
+            );
             Marker marker = new Marker(mapView);
             marker.setPosition(pt);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
@@ -391,10 +385,10 @@ public class ProxyDetailActivity extends AppCompatActivity {
             marker.setSnippet(ip.getLocationSummary());
             mapView.getOverlays().add(marker);
             marker.showInfoWindow();
-            mapView.getController().setZoom(11.0);
-            mapView.getController().animateTo(pt);
+            MapHelper.focusOnPoint(mapView, pt, 14.5);
+        } else {
+            mapView.invalidate();
         }
-        mapView.invalidate();
     }
 
     private void setBadge(TextView badge, String text, int textColorRes, int bgColorRes) {
@@ -414,19 +408,6 @@ public class ProxyDetailActivity extends AppCompatActivity {
         }
     }
 
-    private static void initOsmdroid(Context context) {
-        Context appCtx = context.getApplicationContext();
-        File osmBase = new File(appCtx.getCacheDir(), "osmdroid");
-        File osmTiles = new File(osmBase, "tiles");
-        if (!osmTiles.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            osmTiles.mkdirs();
-        }
-        Configuration.getInstance().setUserAgentValue(appCtx.getPackageName());
-        Configuration.getInstance().setOsmdroidBasePath(osmBase);
-        Configuration.getInstance().setOsmdroidTileCache(osmTiles);
-    }
-
     @Override
     protected void onResume() {
         super.onResume();
@@ -441,6 +422,10 @@ public class ProxyDetailActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (mapView != null) {
+            mapView.onDetach();
+            mapView = null;
+        }
         executor.shutdownNow();
         super.onDestroy();
     }

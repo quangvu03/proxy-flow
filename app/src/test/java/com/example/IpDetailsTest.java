@@ -14,7 +14,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 /**
- * Unit tests for IpDetails comparison, location formatting, and JSON parsing.
+ * Unit tests for IpDetails comparison, location formatting, JSON parsing,
+ * HTTP/1.1 chunked decoding, and multi-provider geo parsing.
  */
 @RunWith(RobolectricTestRunner.class)
 public class IpDetailsTest {
@@ -48,5 +49,47 @@ public class IpDetailsTest {
         JSONObject obj = IpLookupService.parseFirstJsonObject(rawHttp);
         assertNotNull(obj);
         assertEquals("103.1.2.3", obj.optString("ip"));
+    }
+
+    @Test
+    public void parseIpInfoJson_extractsAccurateRegionCityIspAndCoordinates() throws Exception {
+        JSONObject json = new JSONObject("{"
+                + "\"ip\":\"113.161.72.10\","
+                + "\"city\":\"Da Nang\","
+                + "\"region\":\"Da Nang\","
+                + "\"country\":\"VN\","
+                + "\"loc\":\"16.0678,108.2208\","
+                + "\"org\":\"AS45899 VNPT Corp\""
+                + "}");
+
+        IpDetails details = IpLookupService.parseIpInfoToDetails(json, true);
+        assertEquals("113.161.72.10", details.getIpv4());
+        assertEquals("Da Nang", details.getRegion());
+        assertEquals("Da Nang", details.getCity());
+        assertEquals("VN", details.getCountryCode());
+        assertEquals("VNPT Corp", details.getIsp());
+        assertTrue(details.hasCoordinates());
+        assertEquals(16.0678, details.getLatitude(), 0.0001);
+        assertEquals(108.2208, details.getLongitude(), 0.0001);
+    }
+
+    @Test
+    public void decodeHttpResponseBody_decodesChunkedTransferEncoding() {
+        String raw = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n"
+                + "11\r\n"
+                + "{\"ip\":\"1.2.3.4\"}\n\r\n"
+                + "0\r\n\r\n";
+        String body = IpLookupService.decodeHttpResponseBody(raw);
+        assertEquals("{\"ip\":\"1.2.3.4\"}", body);
+    }
+
+    @Test
+    public void isValidIpv4_rejectsIpv6AndInvalidStrings() {
+        assertTrue(IpLookupService.isValidIpv4("14.161.20.10"));
+        assertFalse(IpLookupService.isValidIpv4("2402:800::1"));
+        assertFalse(IpLookupService.isValidIpv4("999.1.2.3"));
+        assertFalse(IpLookupService.isValidIpv4(""));
     }
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/ip_check_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_theme_background"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/ip_check_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/md_theme_surface"
+        app:navigationContentDescription="@string/action_back"
+        app:navigationIcon="@drawable/ic_back"
+        app:title="@string/action_open_ip_map"
+        app:titleTextColor="@color/md_theme_onSurface" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:alpha="0.4"
+        android:background="@color/md_theme_outline" />
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/ip_check_fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

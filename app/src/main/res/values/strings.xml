@@ -5,9 +5,10 @@
     <!-- Navigation -->
     <string name="nav_connect">Kết nối</string>
     <string name="nav_proxies">Danh sách</string>
-    <string name="nav_ip_check">Kiểm tra IP</string>
+    <string name="nav_ip_check">Check IP</string>
     <string name="nav_apps">Ứng dụng</string>
     <string name="nav_logs">Nhật ký</string>
+    <string name="nav_settings">Cài đặt</string>
 
     <!-- Header & Status -->
     <string name="app_subtitle">Trình quản lý &amp; kết nối Proxy HTTP cố định</string>
@@ -41,9 +42,11 @@
     <string name="filter_all">Tất cả</string>
     <string name="filter_online">Hoạt động</string>
     <string name="action_add_proxy">Thêm Proxy</string>
-    <string name="action_test_all">Kiểm tra tất cả</string>
-    <string name="action_import_bulk">Nhập nhanh</string>
-    <string name="action_export_all">Sao chép DS</string>
+    <string name="action_buy_proxy">Mua Proxy</string>
+    <string name="msg_no_browser_found">Không tìm thấy trình duyệt để mở trang mua Proxy</string>
+    <string name="action_test_all">Kiểm tra</string>
+    <string name="action_import_bulk">Nhập DS</string>
+    <string name="action_export_all">Xuất .txt</string>
     <string name="empty_proxy_title">Danh sách Proxy đang trống</string>
     <string name="empty_proxy_subtitle">Thêm Proxy HTTP (host, port, user, pass) hoặc nhập hàng loạt để lưu trữ và tự chọn kết nối cố định.</string>
     <string name="badge_auth_yes">User/Pass</string>
@@ -76,9 +79,19 @@
     <string name="title_import_bulk">Nhập danh sách Proxy</string>
     <string name="hint_import_bulk">Mỗi dòng 1 proxy theo định dạng:\nhost:port:user:pass\nhoặc http://user:pass@host:port\nhoặc host:port</string>
     <string name="action_import_confirm">Nhập vào danh sách</string>
+    <string name="action_paste_clipboard">Dán</string>
+    <string name="action_pick_txt_file">Chọn file .txt</string>
+    <string name="action_clear_text">Xóa</string>
+    <string name="label_import_format_tip">Hỗ trợ chọn file .txt hoặc dán nhiều dòng: ip:port:user:pass • ip:port • http://user:pass@ip:port</string>
+    <string name="label_valid_proxy_lines">%1$d proxy hợp lệ</string>
     <string name="msg_imported_count">Đã thêm %1$d Proxy mới</string>
+    <string name="msg_loaded_from_txt">Đã đọc %1$d Proxy từ file .txt</string>
+    <string name="msg_no_valid_proxy_in_file">Không tìm thấy Proxy hợp lệ trong file đã chọn</string>
+    <string name="msg_import_file_failed">Không thể đọc file: %1$s</string>
+    <string name="msg_exported_txt_success">Đã xuất %1$d Proxy ra file .txt</string>
+    <string name="msg_export_file_failed">Không thể xuất file .txt: %1$s</string>
     <string name="msg_exported_copied">Đã sao chép %1$d Proxy vào Clipboard</string>
-    <string name="msg_no_proxies_to_export">Chưa có Proxy nào để sao chép</string>
+    <string name="msg_no_proxies_to_export">Chưa có Proxy nào để xuất</string>
 
     <!-- Fixed-IP Mode & Logs -->
     <string name="title_fixed_ip_policy">Chế độ IP cố định (Thủ công)</string>
@@ -105,6 +118,9 @@
     <string name="action_check_ip_now">Kiểm tra IP ngay</string>
     <string name="action_open_ip_map">Xem IP &amp; Bản đồ</string>
     <string name="label_ip_map_title">Bản đồ vị trí IP đang sử dụng</string>
+    <string name="desc_switch_map_source">Đổi nguồn bản đồ</string>
+    <string name="desc_map_zoom_in">Phóng to bản đồ</string>
+    <string name="desc_map_zoom_out">Thu nhỏ bản đồ</string>
     <string name="label_focus_current_ip">IP đang dùng</string>
     <string name="label_focus_origin_ip">IP gốc</string>
     <string name="label_focus_both_ip">Xem cả hai</string>
@@ -165,6 +181,8 @@
     <string name="label_app_rules_block_summary">Đang chặn %1$d ứng dụng không dùng Proxy</string>
     <string name="label_app_rules_allow_summary">Chỉ cho phép %1$d ứng dụng dùng Proxy</string>
     <string name="title_app_proxy_screen">Kiểm tra &amp; chọn ứng dụng dùng Proxy</string>
+    <string name="title_app_proxy_compact">Ứng dụng dùng Proxy</string>
+    <string name="hint_app_checkbox_rule">Tích = dùng Proxy • Bỏ tích = không dùng Proxy</string>
     <string name="label_scanning_apps">Đang quét ứng dụng trên thiết bị…</string>
     <string name="label_apps_scan_summary">Tìm thấy %1$d ứng dụng • %2$d ứng dụng có quyền Internet</string>
     <string name="desc_rescan_apps">Quét lại danh sách ứng dụng</string>
@@ -179,17 +197,63 @@
     <string name="filter_apps_user">Người dùng</string>
     <string name="filter_apps_system">Hệ thống</string>
     <string name="filter_apps_checked">Đã tích</string>
+    <string name="filter_apps_bypassed">Không Proxy</string>
     <string name="label_apps_block_count">Đã tích chặn: %1$d ứng dụng</string>
     <string name="label_apps_allow_count">Đã tích cho phép: %1$d ứng dụng</string>
+    <string name="label_apps_all_checked_count">Tất cả %1$d ứng dụng đang dùng Proxy</string>
+    <string name="label_apps_using_and_bypassed_count">Dùng Proxy: %1$d • Bỏ tích: %2$d</string>
     <string name="action_select_all">Tích hết</string>
     <string name="action_clear_selection">Bỏ tích</string>
     <string name="empty_apps_hint">Không tìm thấy ứng dụng phù hợp.</string>
     <string name="desc_app_icon">Biểu tượng ứng dụng</string>
-    <string name="desc_toggle_app_proxy">Tích cho phép hoặc chặn ứng dụng dùng Proxy</string>
+    <string name="desc_toggle_app_proxy">Tích để dùng Proxy, bỏ tích để không dùng Proxy</string>
     <string name="badge_app_user">Người dùng</string>
     <string name="badge_app_system">Hệ thống</string>
     <string name="badge_app_internet_yes">Có Internet</string>
     <string name="badge_app_internet_no">Không Internet</string>
-    <string name="badge_app_via_proxy">Qua Proxy</string>
-    <string name="badge_app_bypass_proxy">Chặn Proxy</string>
+    <string name="badge_app_via_proxy">Dùng Proxy</string>
+    <string name="badge_app_bypass_proxy">Không Proxy</string>
+
+    <!-- Settings, Theme & Language -->
+    <string name="title_settings">Cài đặt</string>
+    <string name="title_settings_card">Cài đặt Giao diện &amp; Ngôn ngữ</string>
+    <string name="action_open_settings">Mở</string>
+    <string name="action_back">Quay lại</string>
+    <string name="section_theme">Giao diện Sáng / Tối</string>
+    <string name="section_theme_subtitle">Mặc định tự đổi theo giờ hệ thống • Tự chỉnh sẽ lưu trong SQLite</string>
+    <string name="theme_system">Theo giờ hệ thống (06:00–18:00 Sáng / Tối)</string>
+    <string name="theme_light">Giao diện Sáng</string>
+    <string name="theme_dark">Giao diện Tối</string>
+    <string name="theme_system_short">Theo giờ máy</string>
+    <string name="theme_light_short">Sáng</string>
+    <string name="theme_dark_short">Tối</string>
+    <string name="section_language">Ngôn ngữ hiển thị</string>
+    <string name="section_language_subtitle">Mặc định theo ngôn ngữ hệ thống • Tự chỉnh sẽ lưu trong SQLite</string>
+    <string name="lang_vietnamese">Tiếng Việt</string>
+    <string name="lang_english">English (Tiếng Anh)</string>
+    <string name="lang_system">Theo ngôn ngữ hệ thống</string>
+    <string name="setting_auto_stop_title">Tự động dừng lại</string>
+    <string name="setting_auto_stop_subtitle">Tự động dừng dịch vụ khi mất kết nối</string>
+    <string name="settings_group_appearance">Giao diện</string>
+    <string name="settings_group_proxy">Proxy</string>
+    <string name="setting_theme_label">Giao diện</string>
+    <string name="setting_language_label">Ngôn ngữ</string>
+    <string name="setting_vpn_timer_title">Hẹn giờ VPN</string>
+    <string name="vpn_timer_always">Luôn luôn</string>
+    <string name="vpn_timer_minutes">%1$d phút</string>
+    <string name="vpn_timer_hours">%1$d giờ</string>
+    <string name="vpn_timer_hours_minutes">%1$d giờ %2$d phút</string>
+    <string name="vpn_timer_custom">Tùy chỉnh…</string>
+    <string name="vpn_timer_custom_current">Tùy chỉnh (%1$s)</string>
+    <string name="vpn_timer_custom_dialog_title">Hẹn giờ VPN tùy chỉnh</string>
+    <string name="vpn_timer_custom_hint">Nhập số phút (1 – 1440)</string>
+    <string name="vpn_timer_custom_invalid">Vui lòng nhập số phút từ 1 đến 1440</string>
+    <string name="action_confirm_timer">Lưu</string>
+    <string name="notif_text_timer_remaining">Cổng cục bộ :%1$d • Còn %2$s</string>
+    <string name="log_auto_stop_network_lost">Mất kết nối mạng — đã tự động dừng dịch vụ Proxy VPN</string>
+    <string name="log_auto_stop_proxy_lost">Mất kết nối tới Proxy %1$s (%2$s) — đã tự động dừng dịch vụ VPN</string>
+    <string name="log_vpn_timer_set">Hẹn giờ VPN: tự động ngắt sau %1$s</string>
+    <string name="log_vpn_timer_always">Hẹn giờ VPN đã chuyển sang chế độ Luôn luôn</string>
+    <string name="log_vpn_timer_expired">Đã hết thời gian hẹn giờ VPN (%1$s) — tự động dừng dịch vụ</string>
+    <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

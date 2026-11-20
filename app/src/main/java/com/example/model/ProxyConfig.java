@@ -147,7 +147,7 @@ public class ProxyConfig {
         if (rawLine == null) {
             return null;
         }
-        String line = rawLine.trim();
+        String line = rawLine.replace("\uFEFF", "").trim();
         if (line.isEmpty() || line.startsWith("#")) {
             return null;
         }

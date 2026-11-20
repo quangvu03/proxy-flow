@@ -8,17 +8,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.ProxyInfo;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.example.MainActivity;
 import com.example.R;
 import com.example.data.InstalledAppScanner;
 import com.example.data.ProxyRepository;
+import com.example.data.SettingsPreferences;
 import com.example.model.AppProxyRule;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
@@ -26,11 +32,17 @@ import com.example.model.ProxyLogEntry;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -45,24 +57,44 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
     public static final String ACTION_STOP = "com.example.action.STOP_VPN";
     public static final String ACTION_SWITCH_TO_PROXY = "com.example.action.SWITCH_TO_PROXY";
     public static final String ACTION_REAPPLY_APP_RULES = "com.example.action.REAPPLY_APP_RULES";
+    public static final String ACTION_UPDATE_VPN_TIMER = "com.example.action.UPDATE_VPN_TIMER";
     public static final String EXTRA_PROXY_ID = "extra_proxy_id";
 
     private static final String CHANNEL_ID = "proxyflow_vpn_channel";
     private static final int NOTIFICATION_ID = 2048;
     private static final long FAILURE_LOG_THROTTLE_MS = 15_000L;
+    private static final long NETWORK_LOST_GRACE_MS = 2_500L;
+    private static final int AUTO_STOP_CONSECUTIVE_FAILURES = 2;
+    private static final int HEALTH_CHECK_INTERVAL_SECONDS = 15;
+    private static final long HEALTH_CHECK_IDLE_THRESHOLD_MS = 20_000L;
+    private static final int HEALTH_PROBE_TIMEOUT_MS = 4_000;
 
     private ProxyRepository repository;
     private ProxyRuntimeManager runtimeManager;
+    private SettingsPreferences settingsPreferences;
     private LocalProxyServer localProxyServer;
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
 
     private ParcelFileDescriptor tunInterface;
     private Thread tunDrainThread;
     private ScheduledExecutorService scheduler;
+    private ExecutorService healthProbeExecutor;
+    private volatile ScheduledFuture<?> pendingNetworkLostFuture;
 
+    private final Set<Network> availableUnderlyingNetworks = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final AtomicBoolean stopping = new AtomicBoolean(false);
+    private final AtomicBoolean healthProbeInFlight = new AtomicBoolean(false);
+    private final AtomicInteger consecutiveUpstreamFailures = new AtomicInteger(0);
+    private final AtomicInteger healthProbeFailures = new AtomicInteger(0);
+    private final AtomicInteger telemetryTickCounter = new AtomicInteger(0);
     private final AtomicLong lastFailureLogMs = new AtomicLong(0L);
+    private final AtomicLong lastUpstreamSuccessMs = new AtomicLong(0L);
 
     private volatile long connectedSinceMs = 0L;
+    private volatile long vpnTimerDeadlineMs = 0L;
+    private volatile int activeVpnTimerMinutes = SettingsPreferences.VPN_TIMER_ALWAYS;
     private volatile ProxyConfig activeProxy = null;
 
     public static void startVpn(Context context, long proxyId) {
@@ -97,11 +129,19 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         context.startService(intent);
     }
 
+    public static void updateVpnTimer(Context context) {
+        Intent intent = new Intent(context, ProxyVpnService.class);
+        intent.setAction(ACTION_UPDATE_VPN_TIMER);
+        context.startService(intent);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
         repository = ProxyRepository.getInstance(this);
         runtimeManager = ProxyRuntimeManager.getInstance();
+        settingsPreferences = new SettingsPreferences(this);
+        connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         localProxyServer = new LocalProxyServer();
         localProxyServer.setEventListener(this);
         createNotificationChannel();
@@ -128,6 +168,14 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             return START_STICKY;
         }
 
+        if (ACTION_UPDATE_VPN_TIMER.equals(action)) {
+            if (isRunning.get()) {
+                applyConfiguredVpnTimer(System.currentTimeMillis(), true);
+                updateNotification();
+            }
+            return START_STICKY;
+        }
+
         long requestedId = intent != null ? intent.getLongExtra(EXTRA_PROXY_ID, -1L) : -1L;
         startForegroundCompat(buildNotification(getString(R.string.status_connecting), ""));
         startTunnelAsync(requestedId);
@@ -149,6 +197,12 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             }
 
             activeProxy = chosen;
+            stopping.set(false);
+            consecutiveUpstreamFailures.set(0);
+            healthProbeFailures.set(0);
+            telemetryTickCounter.set(0);
+            lastUpstreamSuccessMs.set(System.currentTimeMillis());
+
             repository.markActiveProxySync(chosen.getId());
             runtimeManager.postStatus(new ConnectionStatus(
                     ConnectionStatus.State.CONNECTING,
@@ -165,19 +219,36 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
                 int localPort = localProxyServer.start(chosen);
                 establishVpnInterface(chosen, localPort);
                 connectedSinceMs = System.currentTimeMillis();
+                applyConfiguredVpnTimer(connectedSinceMs, false);
                 isRunning.set(true);
+                registerNetworkMonitor();
                 startTelemetryTicker();
 
                 repository.addLog(ProxyLogEntry.Level.SUCCESS,
                         "Đã kết nối VPN Proxy cố định -> " + chosen.getAddressDisplay() + " (cổng cục bộ :" + localPort + ")");
+                if (activeVpnTimerMinutes > 0) {
+                    repository.addLog(ProxyLogEntry.Level.INFO,
+                            getString(R.string.log_vpn_timer_set, formatTimerMinutes(activeVpnTimerMinutes)));
+                }
 
                 // Refresh exit IP and latency once on initial connect without changing proxy
                 ProxyTester.TestResult test = ProxyTester.testProxy(chosen, 6000);
+                if (!isRunning.get()) {
+                    return;
+                }
                 if (test.isSuccess()) {
+                    lastUpstreamSuccessMs.set(System.currentTimeMillis());
                     chosen.setLatencyMs(test.getLatencyMs());
                     chosen.setExitIp(test.getExitIp());
                     chosen.setCountry(test.getCountry());
                     repository.updateTelemetrySync(chosen.getId(), test.getLatencyMs(), test.getExitIp(), test.getCountry(), 0);
+                } else if (isAutoStopEnabled()) {
+                    String reason = test.getErrorMessage() != null && !test.getErrorMessage().isEmpty()
+                            ? test.getErrorMessage()
+                            : getString(R.string.status_error);
+                    autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
+                            chosen.getAddressDisplay(), reason));
+                    return;
                 }
 
                 publishStatus(ConnectionStatus.State.CONNECTED, "");
@@ -233,11 +304,23 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
     private void startTelemetryTicker() {
         stopScheduler();
         scheduler = Executors.newSingleThreadScheduledExecutor();
+        healthProbeExecutor = Executors.newSingleThreadExecutor();
         scheduler.scheduleWithFixedDelay(() -> {
             if (!isRunning.get()) return;
             try {
+                long deadline = vpnTimerDeadlineMs;
+                if (deadline > 0L && System.currentTimeMillis() >= deadline) {
+                    int minutes = activeVpnTimerMinutes;
+                    autoStopOnDisconnect(getString(R.string.log_vpn_timer_expired,
+                            formatTimerMinutes(minutes)));
+                    return;
+                }
                 publishStatus(ConnectionStatus.State.CONNECTED, "");
                 updateNotification();
+                int tick = telemetryTickCounter.incrementAndGet();
+                if (tick % HEALTH_CHECK_INTERVAL_SECONDS == 0 && isAutoStopEnabled()) {
+                    runDisconnectHealthCheck();
+                }
             } catch (Exception ignored) {
             }
         }, 1, 1, TimeUnit.SECONDS);
@@ -314,6 +397,9 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
 
     private void applyManualProxyChange(ProxyConfig nextProxy) {
         activeProxy = nextProxy;
+        consecutiveUpstreamFailures.set(0);
+        healthProbeFailures.set(0);
+        lastUpstreamSuccessMs.set(System.currentTimeMillis());
         localProxyServer.setActiveProxy(nextProxy);
         repository.markActiveProxySync(nextProxy.getId());
         repository.addLog(ProxyLogEntry.Level.SUCCESS,
@@ -336,7 +422,15 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
     }
 
     private void stopTunnelAndService(String errorMsg) {
+        stopTunnelAndService(errorMsg, null);
+    }
+
+    private void stopTunnelAndService(String errorMsg, String customDisconnectLog) {
+        if (!stopping.compareAndSet(false, true)) {
+            return;
+        }
         isRunning.set(false);
+        unregisterNetworkMonitor();
         stopScheduler();
         if (localProxyServer != null) {
             localProxyServer.stop();
@@ -353,25 +447,192 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             tunDrainThread = null;
         }
         connectedSinceMs = 0L;
+        vpnTimerDeadlineMs = 0L;
+        activeVpnTimerMinutes = SettingsPreferences.VPN_TIMER_ALWAYS;
         ProxyConfig current = activeProxy != null ? activeProxy : repository.getActiveProxySync();
         runtimeManager.postDisconnected(current, errorMsg);
-        if (errorMsg == null || errorMsg.isEmpty()) {
+        if (customDisconnectLog != null && !customDisconnectLog.isEmpty()) {
+            repository.addLog(ProxyLogEntry.Level.WARN, customDisconnectLog);
+        } else if (errorMsg == null || errorMsg.isEmpty()) {
             repository.addLog(ProxyLogEntry.Level.INFO, "Đã ngắt kết nối VPN Proxy");
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
 
+    private void autoStopOnDisconnect(String logMessage) {
+        if (!isRunning.get()) {
+            return;
+        }
+        stopTunnelAndService("", logMessage);
+    }
+
+    private boolean isAutoStopEnabled() {
+        return settingsPreferences != null && settingsPreferences.isAutoStopOnDisconnectEnabled();
+    }
+
+    private void registerNetworkMonitor() {
+        unregisterNetworkMonitor();
+        if (connectivityManager == null) {
+            return;
+        }
+        availableUnderlyingNetworks.clear();
+        try {
+            NetworkRequest request = new NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    .build();
+            ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(@NonNull Network network) {
+                    availableUnderlyingNetworks.add(network);
+                    cancelPendingNetworkLostStop();
+                }
+
+                @Override
+                public void onLost(@NonNull Network network) {
+                    availableUnderlyingNetworks.remove(network);
+                    if (!isRunning.get() || !isAutoStopEnabled()) {
+                        return;
+                    }
+                    if (availableUnderlyingNetworks.isEmpty() && !hasActiveUnderlyingInternet()) {
+                        scheduleNetworkLostAutoStop();
+                    }
+                }
+            };
+            connectivityManager.registerNetworkCallback(request, callback);
+            networkCallback = callback;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void unregisterNetworkMonitor() {
+        cancelPendingNetworkLostStop();
+        availableUnderlyingNetworks.clear();
+        if (connectivityManager != null && networkCallback != null) {
+            try {
+                connectivityManager.unregisterNetworkCallback(networkCallback);
+            } catch (Exception ignored) {
+            }
+            networkCallback = null;
+        }
+    }
+
+    private void scheduleNetworkLostAutoStop() {
+        cancelPendingNetworkLostStop();
+        ScheduledExecutorService exec = scheduler;
+        if (exec == null || exec.isShutdown()) {
+            if (!hasActiveUnderlyingInternet() && isAutoStopEnabled()) {
+                autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+            }
+            return;
+        }
+        pendingNetworkLostFuture = exec.schedule(() -> {
+            if (isRunning.get() && isAutoStopEnabled()
+                    && availableUnderlyingNetworks.isEmpty()
+                    && !hasActiveUnderlyingInternet()) {
+                autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+            }
+        }, NETWORK_LOST_GRACE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void cancelPendingNetworkLostStop() {
+        ScheduledFuture<?> future = pendingNetworkLostFuture;
+        if (future != null) {
+            future.cancel(false);
+            pendingNetworkLostFuture = null;
+        }
+    }
+
+    private boolean hasActiveUnderlyingInternet() {
+        if (connectivityManager == null) {
+            return true;
+        }
+        try {
+            Network[] networks = connectivityManager.getAllNetworks();
+            for (Network network : networks) {
+                NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(network);
+                if (caps != null
+                        && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private void runDisconnectHealthCheck() {
+        if (!isRunning.get() || !isAutoStopEnabled()) {
+            return;
+        }
+        if (!hasActiveUnderlyingInternet()) {
+            autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+            return;
+        }
+        long idleMs = System.currentTimeMillis() - lastUpstreamSuccessMs.get();
+        if (idleMs < HEALTH_CHECK_IDLE_THRESHOLD_MS) {
+            return;
+        }
+        ProxyConfig proxy = activeProxy;
+        ExecutorService probeExec = healthProbeExecutor;
+        if (proxy == null || probeExec == null || probeExec.isShutdown()) {
+            return;
+        }
+        if (!healthProbeInFlight.compareAndSet(false, true)) {
+            return;
+        }
+        probeExec.execute(() -> {
+            try {
+                if (!isRunning.get() || !isAutoStopEnabled()) {
+                    return;
+                }
+                if (isProxyTcpReachable(proxy, HEALTH_PROBE_TIMEOUT_MS)) {
+                    healthProbeFailures.set(0);
+                    lastUpstreamSuccessMs.set(System.currentTimeMillis());
+                } else if (healthProbeFailures.incrementAndGet() >= AUTO_STOP_CONSECUTIVE_FAILURES
+                        && isRunning.get()
+                        && isAutoStopEnabled()) {
+                    autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
+                            proxy.getAddressDisplay(), "Timeout"));
+                }
+            } finally {
+                healthProbeInFlight.set(false);
+            }
+        });
+    }
+
+    private static boolean isProxyTcpReachable(ProxyConfig proxy, int timeoutMs) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     private void stopScheduler() {
+        cancelPendingNetworkLostStop();
         if (scheduler != null) {
             scheduler.shutdownNow();
             scheduler = null;
         }
+        if (healthProbeExecutor != null) {
+            healthProbeExecutor.shutdownNow();
+            healthProbeExecutor = null;
+        }
+        healthProbeInFlight.set(false);
     }
 
     @Override
     public void onUpstreamSuccess(long proxyId) {
-        // Keep selected proxy fixed; no rotation or automatic switching
+        if (activeProxy != null && activeProxy.getId() == proxyId) {
+            consecutiveUpstreamFailures.set(0);
+            healthProbeFailures.set(0);
+            lastUpstreamSuccessMs.set(System.currentTimeMillis());
+        }
     }
 
     @Override
@@ -379,13 +640,20 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         if (!isRunning.get() || activeProxy == null || activeProxy.getId() != proxyId) {
             return;
         }
+        if (isAutoStopEnabled()) {
+            int failures = consecutiveUpstreamFailures.incrementAndGet();
+            if (failures >= AUTO_STOP_CONSECUTIVE_FAILURES) {
+                autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
+                        activeProxy.getAddressDisplay(), reason));
+                return;
+            }
+        }
         // Log throttled warning only; never switch or rotate the user's selected proxy
         long now = System.currentTimeMillis();
         long prev = lastFailureLogMs.get();
         if (now - prev >= FAILURE_LOG_THROTTLE_MS && lastFailureLogMs.compareAndSet(prev, now)) {
             repository.addLog(ProxyLogEntry.Level.WARN,
-                    "Proxy " + activeProxy.getAddressDisplay() + " gặp lỗi truyền tải (" + reason
-                            + "). IP vẫn được giữ cố định.");
+                    "Proxy " + activeProxy.getAddressDisplay() + " gặp lỗi truyền tải (" + reason + ").");
         }
     }
 
@@ -397,6 +665,7 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
 
     @Override
     public void onDestroy() {
+        unregisterNetworkMonitor();
         stopScheduler();
         if (localProxyServer != null) {
             localProxyServer.stop();
@@ -418,13 +687,66 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         }
     }
 
+    private void applyConfiguredVpnTimer(long baseTimeMs, boolean logChange) {
+        int minutes = settingsPreferences != null
+                ? settingsPreferences.getVpnTimerMinutes()
+                : SettingsPreferences.VPN_TIMER_ALWAYS;
+        activeVpnTimerMinutes = minutes;
+        if (minutes > 0) {
+            vpnTimerDeadlineMs = baseTimeMs + (minutes * 60_000L);
+            if (logChange) {
+                repository.addLog(ProxyLogEntry.Level.INFO,
+                        getString(R.string.log_vpn_timer_set, formatTimerMinutes(minutes)));
+            }
+        } else {
+            vpnTimerDeadlineMs = 0L;
+            if (logChange) {
+                repository.addLog(ProxyLogEntry.Level.INFO, getString(R.string.log_vpn_timer_always));
+            }
+        }
+    }
+
+    private String formatTimerMinutes(int minutes) {
+        if (minutes <= 0) {
+            return getString(R.string.vpn_timer_always);
+        }
+        int hours = minutes / 60;
+        int remMinutes = minutes % 60;
+        if (hours > 0 && remMinutes > 0) {
+            return getString(R.string.vpn_timer_hours_minutes, hours, remMinutes);
+        }
+        if (hours > 0) {
+            return getString(R.string.vpn_timer_hours, hours);
+        }
+        return getString(R.string.vpn_timer_minutes, minutes);
+    }
+
+    private static String formatRemainingCountdown(long remainingSeconds) {
+        long safe = Math.max(0L, remainingSeconds);
+        long hours = safe / 3600L;
+        long mins = (safe % 3600L) / 60L;
+        long secs = safe % 60L;
+        if (hours > 0) {
+            return String.format(java.util.Locale.US, "%02d:%02d:%02d", hours, mins, secs);
+        }
+        return String.format(java.util.Locale.US, "%02d:%02d", mins, secs);
+    }
+
     private void updateNotification() {
         if (!isRunning.get() || activeProxy == null) return;
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
             String title = getString(R.string.notif_title_connected, activeProxy.getAddressDisplay());
-            String body = getString(R.string.notif_text_connected,
-                    localProxyServer.getLocalPort(), getString(R.string.label_manual_fixed_ip));
+            String body;
+            long deadline = vpnTimerDeadlineMs;
+            if (deadline > 0L) {
+                long remainingSec = Math.max(0L, (deadline - System.currentTimeMillis() + 999L) / 1000L);
+                body = getString(R.string.notif_text_timer_remaining,
+                        localProxyServer.getLocalPort(), formatRemainingCountdown(remainingSec));
+            } else {
+                body = getString(R.string.notif_text_connected,
+                        localProxyServer.getLocalPort(), getString(R.string.label_manual_fixed_ip));
+            }
             nm.notify(NOTIFICATION_ID, buildNotification(title, body));
         }
     }

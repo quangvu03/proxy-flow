@@ -147,9 +147,54 @@ public class ProxyRepository {
         appProxyRuleLiveData.setValue(updated);
     }
 
-    public void clearSelectedApps() {
+    public void setAppUsesProxy(String packageName, boolean usesProxy) {
+        if (packageName == null || packageName.isEmpty()) return;
+        Set<String> bypassed = extractBypassedPackages();
+        if (usesProxy) {
+            bypassed.remove(packageName);
+        } else {
+            bypassed.add(packageName);
+        }
+        AppProxyRule updated = new AppProxyRule(AppProxyRule.Mode.BLOCK_SELECTED, bypassed);
+        prefs.saveAppProxyRule(updated);
+        appProxyRuleLiveData.setValue(updated);
+    }
+
+    public void setMultipleAppsUseProxy(List<String> packageNames, boolean usesProxy) {
+        if (packageNames == null) return;
+        Set<String> bypassed = extractBypassedPackages();
+        if (usesProxy) {
+            for (String p : packageNames) {
+                bypassed.remove(p);
+            }
+        } else {
+            bypassed.addAll(packageNames);
+        }
+        AppProxyRule updated = new AppProxyRule(AppProxyRule.Mode.BLOCK_SELECTED, bypassed);
+        prefs.saveAppProxyRule(updated);
+        appProxyRuleLiveData.setValue(updated);
+    }
+
+    private Set<String> extractBypassedPackages() {
         AppProxyRule current = getAppProxyRuleSync();
-        AppProxyRule updated = new AppProxyRule(current.getMode(), new HashSet<>());
+        if (current.getMode() == AppProxyRule.Mode.BLOCK_SELECTED) {
+            return new HashSet<>(current.getSelectedPackages());
+        }
+        // Migrate legacy ALLOW_SELECTED rule to BLOCK_SELECTED bypassed set
+        Set<String> bypassed = new HashSet<>();
+        List<InstalledAppInfo> known = installedAppsLiveData.getValue();
+        if (known != null) {
+            for (InstalledAppInfo app : known) {
+                if (!current.isPackageChecked(app.getPackageName())) {
+                    bypassed.add(app.getPackageName());
+                }
+            }
+        }
+        return bypassed;
+    }
+
+    public void clearSelectedApps() {
+        AppProxyRule updated = new AppProxyRule(AppProxyRule.Mode.BLOCK_SELECTED, new HashSet<>());
         prefs.saveAppProxyRule(updated);
         appProxyRuleLiveData.setValue(updated);
     }

@@ -20,6 +20,7 @@
     </queries>
 
     <application
+        android:name=".ProxyFlowApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -43,6 +44,18 @@
 
         <activity
             android:name=".ui.ProxyDetailActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow" />
+
+        <activity
+            android:name=".ui.IpCheckActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.ProxyFlow" />

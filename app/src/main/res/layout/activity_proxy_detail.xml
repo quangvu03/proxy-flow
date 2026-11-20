@@ -33,7 +33,8 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:padding="16dp">
+            android:paddingHorizontal="@dimen/screen_padding_horizontal"
+            android:paddingVertical="@dimen/screen_padding_vertical">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -109,28 +110,49 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
+                            android:baselineAligned="false"
                             android:orientation="horizontal">
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btn_retest_all"
                                 style="@style/Widget.Material3.Button.OutlinedButton"
                                 android:layout_width="0dp"
-                                android:layout_height="48dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginEnd="6dp"
                                 android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:maxLines="2"
+                                android:minWidth="0dp"
+                                android:minHeight="48dp"
+                                android:paddingHorizontal="8dp"
                                 android:text="@string/action_retest_all"
-                                android:textSize="13sp"
-                                app:icon="@drawable/ic_refresh" />
+                                android:textSize="12sp"
+                                app:icon="@drawable/ic_refresh"
+                                app:iconPadding="4dp"
+                                app:iconSize="16dp" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btn_connect_this_proxy"
                                 android:layout_width="0dp"
-                                android:layout_height="48dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginStart="6dp"
                                 android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:maxLines="2"
+                                android:minWidth="0dp"
+                                android:minHeight="48dp"
+                                android:paddingHorizontal="8dp"
                                 android:text="@string/action_connect_this_proxy"
-                                android:textSize="13sp"
-                                app:icon="@drawable/ic_power" />
+                                android:textSize="12sp"
+                                app:icon="@drawable/ic_power"
+                                app:iconPadding="4dp"
+                                app:iconSize="16dp" />
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -317,10 +339,12 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="4dp"
+                                    android:ellipsize="end"
                                     android:fontFamily="monospace"
+                                    android:maxLines="1"
                                     android:text="—"
                                     android:textColor="@color/md_theme_primary"
-                                    android:textSize="18sp"
+                                    android:textSize="15sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
 
@@ -330,7 +354,7 @@
                                 android:layout_weight="1"
                                 android:gravity="center"
                                 android:orientation="vertical"
-                                android:padding="8dp">
+                                android:padding="4dp">
 
                                 <TextView
                                     android:layout_width="wrap_content"
@@ -344,10 +368,12 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="4dp"
+                                    android:ellipsize="end"
                                     android:fontFamily="monospace"
+                                    android:maxLines="1"
                                     android:text="—"
                                     android:textColor="@color/status_connected"
-                                    android:textSize="18sp"
+                                    android:textSize="15sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
 
@@ -357,7 +383,7 @@
                                 android:layout_weight="1"
                                 android:gravity="center"
                                 android:orientation="vertical"
-                                android:padding="8dp">
+                                android:padding="4dp">
 
                                 <TextView
                                     android:layout_width="wrap_content"
@@ -371,10 +397,12 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="4dp"
+                                    android:ellipsize="end"
                                     android:fontFamily="monospace"
+                                    android:maxLines="1"
                                     android:text="—"
                                     android:textColor="@color/md_theme_secondary"
-                                    android:textSize="18sp"
+                                    android:textSize="15sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
                         </LinearLayout>
@@ -603,17 +631,65 @@
 
                         <com.google.android.material.card.MaterialCardView
                             android:layout_width="match_parent"
-                            android:layout_height="190dp"
+                            android:layout_height="@dimen/detail_map_height"
                             android:layout_marginTop="12dp"
                             app:cardCornerRadius="16dp"
                             app:cardElevation="0dp"
                             app:strokeColor="@color/md_theme_outline"
                             app:strokeWidth="1dp">
 
-                            <org.osmdroid.views.MapView
-                                android:id="@+id/map_detail_proxy"
+                            <FrameLayout
                                 android:layout_width="match_parent"
-                                android:layout_height="match_parent" />
+                                android:layout_height="match_parent">
+
+                                <org.osmdroid.views.MapView
+                                    android:id="@+id/map_detail_proxy"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent" />
+
+                                <com.google.android.material.card.MaterialCardView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="bottom|end"
+                                    android:layout_margin="8dp"
+                                    app:cardBackgroundColor="@color/md_theme_surface"
+                                    app:cardCornerRadius="14dp"
+                                    app:cardElevation="3dp"
+                                    app:strokeColor="@color/md_theme_outline"
+                                    app:strokeWidth="1dp">
+
+                                    <LinearLayout
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:orientation="vertical">
+
+                                        <ImageButton
+                                            android:id="@+id/btn_detail_zoom_in"
+                                            android:layout_width="48dp"
+                                            android:layout_height="48dp"
+                                            android:background="?attr/selectableItemBackgroundBorderless"
+                                            android:contentDescription="@string/desc_map_zoom_in"
+                                            android:src="@drawable/ic_zoom_in"
+                                            app:tint="@color/md_theme_onSurface" />
+
+                                        <View
+                                            android:layout_width="28dp"
+                                            android:layout_height="1dp"
+                                            android:layout_gravity="center_horizontal"
+                                            android:alpha="0.45"
+                                            android:background="@color/md_theme_outline" />
+
+                                        <ImageButton
+                                            android:id="@+id/btn_detail_zoom_out"
+                                            android:layout_width="48dp"
+                                            android:layout_height="48dp"
+                                            android:background="?attr/selectableItemBackgroundBorderless"
+                                            android:contentDescription="@string/desc_map_zoom_out"
+                                            android:src="@drawable/ic_zoom_out"
+                                            app:tint="@color/md_theme_onSurface" />
+                                    </LinearLayout>
+                                </com.google.android.material.card.MaterialCardView>
+                            </FrameLayout>
                         </com.google.android.material.card.MaterialCardView>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

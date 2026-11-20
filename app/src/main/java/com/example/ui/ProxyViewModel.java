@@ -104,6 +104,16 @@ public class ProxyViewModel extends AndroidViewModel {
         markPendingApplyIfRunning();
     }
 
+    public void setAppUsesProxy(String packageName, boolean usesProxy) {
+        repository.setAppUsesProxy(packageName, usesProxy);
+        markPendingApplyIfRunning();
+    }
+
+    public void setMultipleAppsUseProxy(List<String> packageNames, boolean usesProxy) {
+        repository.setMultipleAppsUseProxy(packageNames, usesProxy);
+        markPendingApplyIfRunning();
+    }
+
     public void clearSelectedApps() {
         repository.clearSelectedApps();
         markPendingApplyIfRunning();
@@ -178,5 +188,9 @@ public class ProxyViewModel extends AndroidViewModel {
 
     public String exportAllProxiesText() {
         return repository.exportAllProxiesTextSync();
+    }
+
+    public void addLog(ProxyLogEntry.Level level, String message) {
+        repository.addLog(level, message);
     }
 }

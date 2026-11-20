@@ -4,7 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:clipToPadding="false"
-    android:padding="16dp">
+    android:paddingHorizontal="@dimen/screen_padding_horizontal"
+    android:paddingVertical="@dimen/screen_padding_vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -17,7 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardBackgroundColor="@android:color/transparent"
-            app:cardCornerRadius="24dp"
+            app:cardCornerRadius="22dp"
             app:cardElevation="2dp"
             app:strokeColor="@color/hero_card_stroke"
             app:strokeWidth="1dp">
@@ -27,7 +28,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_hero_card"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="@dimen/hero_card_padding">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -205,55 +206,62 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:baselineAligned="false"
                 android:orientation="horizontal"
-                android:padding="16dp">
+                android:padding="@dimen/card_padding">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:layout_weight="1.2"
+                    android:orientation="vertical"
+                    android:paddingEnd="6dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/label_exit_ip"
                         android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
 
                     <TextView
                         android:id="@+id/tv_exit_ip_value"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:ellipsize="end"
                         android:fontFamily="monospace"
+                        android:maxLines="1"
                         android:text="—"
                         android:textColor="@color/md_theme_onSurface"
-                        android:textSize="14sp"
+                        android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:layout_weight="0.9"
+                    android:orientation="vertical"
+                    android:paddingEnd="6dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/label_latency"
                         android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
 
                     <TextView
                         android:id="@+id/tv_latency_value"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         android:text="@string/latency_untested"
                         android:textColor="@color/md_theme_onSurface"
-                        android:textSize="14sp"
+                        android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -268,16 +276,18 @@
                         android:layout_height="wrap_content"
                         android:text="@string/label_auth_status"
                         android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="12sp" />
+                        android:textSize="11sp" />
 
                     <TextView
                         android:id="@+id/tv_auth_value"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         android:text="—"
                         android:textColor="@color/md_theme_onSurface"
-                        android:textSize="14sp"
+                        android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </LinearLayout>
@@ -467,6 +477,7 @@
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
@@ -475,7 +486,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:textColor="@color/md_theme_onSurface"
-                        android:textSize="15sp"
+                        android:textSize="14sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -484,7 +495,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="13sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
@@ -492,7 +503,10 @@
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:text="@string/label_go_to_list" />
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="14dp"
+                    android:text="@string/label_go_to_list"
+                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -513,11 +527,12 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="16dp">
+                android:padding="@dimen/card_padding">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
@@ -526,7 +541,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/title_app_proxy_card"
                         android:textColor="@color/md_theme_onSurface"
-                        android:textSize="15sp"
+                        android:textSize="14sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -536,7 +551,7 @@
                         android:layout_marginTop="2dp"
                         android:text="@string/label_app_rules_all_via_proxy"
                         android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="13sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
@@ -544,7 +559,10 @@
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:text="@string/action_select_apps" />
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="14dp"
+                    android:text="@string/action_select_apps"
+                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

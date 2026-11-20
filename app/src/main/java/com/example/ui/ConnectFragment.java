@@ -1,5 +1,6 @@
 package com.example.ui;
 
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -96,11 +97,7 @@ public class ConnectFragment extends Fragment {
 
         View cardDiagnostics = view.findViewById(R.id.card_node_diagnostics);
         if (cardDiagnostics != null) {
-            cardDiagnostics.setOnClickListener(v -> {
-                if (getActivity() instanceof HostActions) {
-                    ((HostActions) getActivity()).onNavigateToTab(R.id.nav_ip_check);
-                }
-            });
+            cardDiagnostics.setOnClickListener(v -> openIpCheckScreen());
         }
 
         btnToggleVpn.setOnClickListener(v -> {
@@ -109,11 +106,7 @@ public class ConnectFragment extends Fragment {
             }
         });
 
-        btnOpenIpMap.setOnClickListener(v -> {
-            if (getActivity() instanceof HostActions) {
-                ((HostActions) getActivity()).onNavigateToTab(R.id.nav_ip_check);
-            }
-        });
+        btnOpenIpMap.setOnClickListener(v -> openIpCheckScreen());
 
         btnTestActive.setOnClickListener(v -> {
             ProxyConfig target = (latestStatus != null && latestStatus.getActiveProxy() != null)
@@ -164,6 +157,10 @@ public class ConnectFragment extends Fragment {
 
         viewModel.getProxies().observe(getViewLifecycleOwner(), this::renderPoolSummary);
         viewModel.getAppProxyRule().observe(getViewLifecycleOwner(), this::renderAppRuleSummary);
+    }
+
+    private void openIpCheckScreen() {
+        startActivity(new Intent(requireContext(), IpCheckActivity.class));
     }
 
     private void renderStatus() {

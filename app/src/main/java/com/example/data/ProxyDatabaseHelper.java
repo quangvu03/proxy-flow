@@ -18,7 +18,9 @@ import java.util.List;
 public class ProxyDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "proxyflow.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
+
+    private static volatile ProxyDatabaseHelper instance;
 
     private static final String TABLE_PROXIES = "proxies";
     private static final String COL_ID = "id";
@@ -40,6 +42,21 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     private static final String COL_LOG_TS = "timestamp";
     private static final String COL_LOG_LEVEL = "level";
     private static final String COL_LOG_MESSAGE = "message";
+
+    private static final String TABLE_SETTINGS = "app_settings";
+    private static final String COL_SETTING_KEY = "setting_key";
+    private static final String COL_SETTING_VALUE = "setting_value";
+
+    public static ProxyDatabaseHelper getInstance(Context context) {
+        if (instance == null) {
+            synchronized (ProxyDatabaseHelper.class) {
+                if (instance == null) {
+                    instance = new ProxyDatabaseHelper(context.getApplicationContext());
+                }
+            }
+        }
+        return instance;
+    }
 
     public ProxyDatabaseHelper(Context context) {
         super(context.getApplicationContext(), DATABASE_NAME, null, DATABASE_VERSION);
@@ -71,13 +88,59 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
                 + COL_LOG_MESSAGE + " TEXT NOT NULL"
                 + ")";
         db.execSQL(createLogs);
+
+        createSettingsTable(db);
+    }
+
+    private void createSettingsTable(SQLiteDatabase db) {
+        String createSettings = "CREATE TABLE IF NOT EXISTS " + TABLE_SETTINGS + " ("
+                + COL_SETTING_KEY + " TEXT PRIMARY KEY, "
+                + COL_SETTING_VALUE + " TEXT NOT NULL"
+                + ")";
+        db.execSQL(createSettings);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PROXIES);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_LOGS);
-        onCreate(db);
+        if (oldVersion < 2) {
+            createSettingsTable(db);
+        }
+    }
+
+    public synchronized String getSetting(String key, String defaultValue) {
+        if (key == null || key.isEmpty()) return defaultValue;
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor cursor = db.query(TABLE_SETTINGS, new String[]{COL_SETTING_VALUE},
+                COL_SETTING_KEY + " = ?", new String[]{key}, null, null, null)) {
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        }
+        return defaultValue;
+    }
+
+    public synchronized void putSetting(String key, String value) {
+        if (key == null || key.isEmpty()) return;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put(COL_SETTING_KEY, key);
+        cv.put(COL_SETTING_VALUE, value != null ? value : "");
+        db.insertWithOnConflict(TABLE_SETTINGS, null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public synchronized boolean hasSetting(String key) {
+        if (key == null || key.isEmpty()) return false;
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor cursor = db.query(TABLE_SETTINGS, new String[]{COL_SETTING_KEY},
+                COL_SETTING_KEY + " = ?", new String[]{key}, null, null, null)) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    public synchronized void deleteSetting(String key) {
+        if (key == null || key.isEmpty()) return;
+        SQLiteDatabase db = getWritableDatabase();
+        db.delete(TABLE_SETTINGS, COL_SETTING_KEY + " = ?", new String[]{key});
     }
 
     public synchronized long insertProxy(ProxyConfig proxy) {

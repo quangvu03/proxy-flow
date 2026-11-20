@@ -36,8 +36,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@color/md_theme_surface"
-                app:subtitle="@string/app_subtitle"
-                app:subtitleTextColor="@color/md_theme_onSurfaceVariant"
+                android:minHeight="48dp"
+                app:menu="@menu/menu_top_bar"
                 app:title="@string/app_name"
                 app:titleTextColor="@color/md_theme_onSurface" />
 

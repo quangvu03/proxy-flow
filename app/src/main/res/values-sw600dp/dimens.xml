@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tablets & Foldables (>= 600dp width) -->
+    <dimen name="screen_padding_horizontal">40dp</dimen>
+    <dimen name="screen_padding_vertical">18dp</dimen>
+    <dimen name="card_padding">20dp</dimen>
+    <dimen name="hero_card_padding">24dp</dimen>
+    <dimen name="ip_map_height">330dp</dimen>
+    <dimen name="detail_map_height">250dp</dimen>
+    <dimen name="bulk_import_min_height">360dp</dimen>
+</resources>

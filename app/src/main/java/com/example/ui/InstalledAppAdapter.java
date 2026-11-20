@@ -23,14 +23,13 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import java.util.Collections;
 
 /**
- * RecyclerView adapter displaying installed device apps with their package name,
- * system/user classification, INTERNET permission check, live proxy routing status,
- * and checkbox for per-app allow/block selection.
+ * RecyclerView adapter displaying installed device apps with a single intuitive checkbox:
+ * Checked = app uses Proxy, Unchecked = app does NOT use Proxy (direct network).
  */
 public class InstalledAppAdapter extends ListAdapter<InstalledAppInfo, InstalledAppAdapter.AppViewHolder> {
 
     public interface OnAppToggleListener {
-        void onAppToggled(InstalledAppInfo app, boolean checked);
+        void onAppProxyToggled(InstalledAppInfo app, boolean useProxy);
     }
 
     private final OnAppToggleListener listener;
@@ -83,8 +82,6 @@ public class InstalledAppAdapter extends ListAdapter<InstalledAppInfo, Installed
         private final TextView tvName;
         private final TextView tvPackage;
         private final TextView tvRoutingBadge;
-        private final TextView tvTypeBadge;
-        private final TextView tvInternetBadge;
         private final MaterialCheckBox cbSelected;
 
         AppViewHolder(@NonNull View itemView) {
@@ -94,8 +91,6 @@ public class InstalledAppAdapter extends ListAdapter<InstalledAppInfo, Installed
             tvName = itemView.findViewById(R.id.tv_app_name);
             tvPackage = itemView.findViewById(R.id.tv_app_package);
             tvRoutingBadge = itemView.findViewById(R.id.tv_app_routing_badge);
-            tvTypeBadge = itemView.findViewById(R.id.tv_app_type_badge);
-            tvInternetBadge = itemView.findViewById(R.id.tv_app_internet_badge);
             cbSelected = itemView.findViewById(R.id.cb_app_selected);
         }
 
@@ -110,23 +105,7 @@ public class InstalledAppAdapter extends ListAdapter<InstalledAppInfo, Installed
                 ivIcon.setImageResource(R.drawable.ic_apps);
             }
 
-            tvTypeBadge.setText(app.isSystemApp() ? R.string.badge_app_system : R.string.badge_app_user);
-            tvTypeBadge.setBackgroundTintList(
-                    ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
-
-            if (app.hasInternetPermission()) {
-                tvInternetBadge.setText(R.string.badge_app_internet_yes);
-                tvInternetBadge.setTextColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
-                tvInternetBadge.setBackgroundTintList(
-                        ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
-            } else {
-                tvInternetBadge.setText(R.string.badge_app_internet_no);
-                tvInternetBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_idle));
-                tvInternetBadge.setBackgroundTintList(
-                        ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
-            }
-
-            boolean checked = rule.isPackageChecked(app.getPackageName());
+            // Single checkbox semantics: Checked = Uses Proxy, Unchecked = Does NOT use Proxy
             boolean usesProxy = rule.doesAppUseProxy(app.getPackageName());
 
             if (usesProxy) {
@@ -142,9 +121,9 @@ public class InstalledAppAdapter extends ListAdapter<InstalledAppInfo, Installed
             }
 
             cbSelected.setOnCheckedChangeListener(null);
-            cbSelected.setChecked(checked);
+            cbSelected.setChecked(usesProxy);
             cbSelected.setOnCheckedChangeListener((buttonView, isChecked) ->
-                    listener.onAppToggled(app, isChecked));
+                    listener.onAppProxyToggled(app, isChecked));
 
             cardView.setOnClickListener(v -> cbSelected.performClick());
         }

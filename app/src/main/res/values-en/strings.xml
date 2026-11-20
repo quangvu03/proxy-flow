@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProxyFlow</string>
+
+    <!-- Navigation -->
+    <string name="nav_connect">Connect</string>
+    <string name="nav_proxies">Proxies</string>
+    <string name="nav_ip_check">IP Check</string>
+    <string name="nav_apps">Apps</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Header & Status -->
+    <string name="app_subtitle">Static HTTP Proxy Manager &amp; VPN Router</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Starting VPN…</string>
+    <string name="status_connected">Protected &amp; Routing</string>
+    <string name="status_error">Connection Error</string>
+
+    <!-- Dashboard -->
+    <string name="action_connect">Connect Proxy</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_test_active">Check IP &amp; Ping</string>
+    <string name="label_active_proxy">Selected Proxy</string>
+    <string name="label_no_proxy_selected">No Proxy Selected</string>
+    <string name="label_select_or_add_hint">Open the Proxies tab to add or choose an HTTP Proxy</string>
+    <string name="label_local_gateway">Local Gateway: 127.0.0.1:%1$d</string>
+    <string name="label_exit_ip">Exit IP</string>
+    <string name="label_latency">Latency</string>
+    <string name="label_auth_status">Auth</string>
+    <string name="label_bytes_sent">Sent</string>
+    <string name="label_bytes_received">Received</string>
+    <string name="label_active_conns">TCP Sessions</string>
+    <string name="label_uptime">Uptime</string>
+    <string name="label_manual_fixed_ip">Keep Fixed IP</string>
+    <string name="label_saved_proxies_count">Saved Proxies (%1$d)</string>
+    <string name="label_manual_mode_desc">Manual mode • Only switches Proxy when you choose</string>
+    <string name="label_go_to_list">Manage</string>
+
+    <!-- Proxy List -->
+    <string name="hint_search_proxy">Search by name, IP, or country…</string>
+    <string name="filter_all">All</string>
+    <string name="filter_online">Online</string>
+    <string name="action_add_proxy">Add Proxy</string>
+    <string name="action_buy_proxy">Buy Proxy</string>
+    <string name="msg_no_browser_found">No browser app found to open the Buy Proxy link</string>
+    <string name="action_test_all">Test All</string>
+    <string name="action_import_bulk">Import</string>
+    <string name="action_export_all">Export .txt</string>
+    <string name="empty_proxy_title">Your Proxy List Is Empty</string>
+    <string name="empty_proxy_subtitle">Add an HTTP Proxy (host, port, user, pass) or bulk import to save and connect with a fixed IP.</string>
+    <string name="badge_auth_yes">User/Pass</string>
+    <string name="badge_auth_no">No Auth</string>
+    <string name="badge_active_now">Active</string>
+    <string name="latency_untested">Untested</string>
+    <string name="latency_failed">Failed</string>
+    <string name="latency_ms">%1$d ms</string>
+    <string name="desc_test_proxy">Inspect proxy</string>
+    <string name="desc_edit_proxy">Edit proxy</string>
+    <string name="desc_delete_proxy">Delete proxy</string>
+
+    <!-- Add / Edit Proxy Sheet -->
+    <string name="title_add_proxy">Add HTTP Proxy</string>
+    <string name="title_edit_proxy">Update Proxy</string>
+    <string name="hint_proxy_name">Label (e.g. US East 1)</string>
+    <string name="hint_proxy_host">HTTP Host / IP (e.g. 192.168.1.10)</string>
+    <string name="hint_proxy_port">Port (e.g. 8080)</string>
+    <string name="hint_proxy_user">Username (optional)</string>
+    <string name="hint_proxy_pass">Password (optional)</string>
+    <string name="action_paste_parse">Paste &amp; Auto-Parse (ip:port:user:pass)</string>
+    <string name="action_save">Save Proxy</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="error_host_required">Please enter an HTTP Host / IP address</string>
+    <string name="error_port_invalid">Port must be between 1 and 65535</string>
+    <string name="msg_clipboard_parsed">Auto-filled from Clipboard</string>
+    <string name="msg_clipboard_invalid">Could not recognize ip:port[:user:pass] format</string>
+
+    <!-- Bulk Import Dialog -->
+    <string name="title_import_bulk">Import Proxy List</string>
+    <string name="hint_import_bulk">One proxy per line:\nhost:port:user:pass\nor http://user:pass@host:port\nor host:port</string>
+    <string name="action_import_confirm">Import to List</string>
+    <string name="action_paste_clipboard">Paste</string>
+    <string name="action_pick_txt_file">Pick .txt File</string>
+    <string name="action_clear_text">Clear</string>
+    <string name="label_import_format_tip">Pick a .txt file or paste lines: ip:port:user:pass • ip:port • http://user:pass@ip:port</string>
+    <string name="label_valid_proxy_lines">%1$d valid proxies</string>
+    <string name="msg_imported_count">Added %1$d new proxies</string>
+    <string name="msg_loaded_from_txt">Loaded %1$d proxies from .txt file</string>
+    <string name="msg_no_valid_proxy_in_file">No valid proxies found in the selected file</string>
+    <string name="msg_import_file_failed">Could not read file: %1$s</string>
+    <string name="msg_exported_txt_success">Exported %1$d proxies to .txt file</string>
+    <string name="msg_export_file_failed">Could not export .txt file: %1$s</string>
+    <string name="msg_exported_copied">Copied %1$d proxies to Clipboard</string>
+    <string name="msg_no_proxies_to_export">No proxies to export</string>
+
+    <!-- Fixed-IP Mode & Logs -->
+    <string name="title_fixed_ip_policy">Fixed-IP Mode (Manual)</string>
+    <string name="desc_fixed_ip_policy">The app never auto-switches or rotates your Proxy. Your IP remains fixed until you manually choose another Proxy in the list, preventing security triggers on sensitive apps.</string>
+    <string name="title_logs_section">Connection Logs</string>
+    <string name="action_clear_logs">Clear Logs</string>
+    <string name="empty_logs_hint">No connection events yet.</string>
+
+    <!-- Notifications & Messages -->
+    <string name="notif_channel_name">Proxy VPN Status</string>
+    <string name="notif_channel_desc">Shows fixed Proxy VPN connection status</string>
+    <string name="notif_title_connected">ProxyFlow Active • %1$s</string>
+    <string name="notif_text_connected">Local port :%1$d • %2$s</string>
+    <string name="notif_action_stop">Stop</string>
+    <string name="msg_no_proxy_to_connect">Please add at least 1 Proxy before connecting</string>
+    <string name="msg_vpn_permission_denied">VPN permission is required to route system traffic</string>
+    <string name="msg_delete_confirm_title">Delete this Proxy?</string>
+    <string name="msg_delete_confirm_body">Are you sure you want to remove %1$s from your saved list?</string>
+    <string name="action_delete">Delete</string>
+    <string name="msg_testing_all">Testing %1$d proxies…</string>
+    <string name="msg_proxy_saved">Proxy saved successfully</string>
+
+    <!-- IP Checker & Map -->
+    <string name="action_check_ip_now">Check IP Now</string>
+    <string name="action_open_ip_map">View IP &amp; Map</string>
+    <string name="label_ip_map_title">Active IP Location Map</string>
+    <string name="desc_switch_map_source">Switch map tile provider</string>
+    <string name="desc_map_zoom_in">Zoom in map</string>
+    <string name="desc_map_zoom_out">Zoom out map</string>
+    <string name="label_focus_current_ip">Active IP</string>
+    <string name="label_focus_origin_ip">Original IP</string>
+    <string name="label_focus_both_ip">Show Both</string>
+    <string name="label_current_ip_section">Current IP (Active Exit)</string>
+    <string name="label_origin_ip_section">Original IP (Device Network)</string>
+    <string name="badge_proxy_routed">Routed via Proxy</string>
+    <string name="badge_direct_network">Direct Network</string>
+    <string name="badge_ip_masked">Original IP Safely Masked</string>
+    <string name="badge_ip_exposed">Matches Original IP (Proxy Off)</string>
+    <string name="label_ipv4">IPv4 Address</string>
+    <string name="label_ipv6">IPv6 Address</string>
+    <string name="label_region_province">Province / Region</string>
+    <string name="label_city">City</string>
+    <string name="label_country">Country</string>
+    <string name="label_isp">ISP / Carrier</string>
+    <string name="label_coordinates">Coordinates</string>
+    <string name="ip_checking_loading">Checking…</string>
+    <string name="ip_not_available">Not supported / Unavailable</string>
+    <string name="msg_ip_copied">IP address copied to Clipboard</string>
+    <string name="msg_ip_check_failed">Failed to check part of IP info: %1$s</string>
+    <string name="label_checking_progress">Querying IPv4, IPv6, and geolocation…</string>
+
+    <!-- Proxy Detail & Speed Test -->
+    <string name="action_inspect_proxy">Inspect</string>
+    <string name="title_proxy_detail">Proxy Details &amp; Diagnostics</string>
+    <string name="verdict_testing">Inspecting Proxy…</string>
+    <string name="verdict_testing_sub">Testing TCP connection, authentication, network speed, and exit IP…</string>
+    <string name="verdict_usable">USABLE</string>
+    <string name="verdict_usable_sub">Proxy is healthy and ready for fixed connection.</string>
+    <string name="verdict_unusable">UNUSABLE</string>
+    <string name="verdict_unusable_sub">Proxy did not respond or authentication failed.</string>
+    <string name="action_retest_all">Re-check</string>
+    <string name="action_connect_this_proxy">Connect This Proxy</string>
+    <string name="section_diagnostics">Technical Diagnostics</string>
+    <string name="diag_tcp_connect">TCP Connection (%1$s)</string>
+    <string name="diag_auth_check">User / Pass Auth</string>
+    <string name="diag_https_tunnel">HTTPS Tunnel (CONNECT)</string>
+    <string name="diag_status_pending">Waiting…</string>
+    <string name="diag_status_ok">Passed</string>
+    <string name="diag_status_fail">Failed</string>
+    <string name="diag_auth_none">No Auth Required</string>
+    <string name="diag_auth_ok">Auth Valid</string>
+    <string name="diag_auth_failed">Invalid User / Pass (407)</string>
+    <string name="section_speed_test">Proxy Speed Test</string>
+    <string name="action_run_speed_test">Test Speed</string>
+    <string name="label_speed_ping">Avg Ping</string>
+    <string name="label_speed_download">Download</string>
+    <string name="label_speed_upload">Upload</string>
+    <string name="label_speed_testing">Measuring real download / upload speed via Proxy…</string>
+    <string name="label_speed_done">Speed test via Proxy completed</string>
+    <string name="label_speed_failed">Cannot measure speed because Proxy failed</string>
+    <string name="section_proxy_ip_geo">Proxy Exit IP &amp; Geolocation</string>
+
+    <!-- Installed Apps & Per-App Proxy Control -->
+    <string name="title_app_proxy_card">Apps Using Proxy</string>
+    <string name="action_select_apps">Select Apps</string>
+    <string name="label_app_rules_all_via_proxy">All apps routed via Proxy</string>
+    <string name="label_app_rules_block_summary">Blocking %1$d apps from Proxy</string>
+    <string name="label_app_rules_allow_summary">Only allowing %1$d apps via Proxy</string>
+    <string name="title_app_proxy_screen">Inspect &amp; Select Apps for Proxy</string>
+    <string name="title_app_proxy_compact">Apps Using Proxy</string>
+    <string name="hint_app_checkbox_rule">Checked = Use Proxy • Unchecked = Bypass Proxy</string>
+    <string name="label_scanning_apps">Scanning installed apps…</string>
+    <string name="label_apps_scan_summary">Found %1$d apps • %2$d apps have Internet permission</string>
+    <string name="desc_rescan_apps">Rescan installed apps</string>
+    <string name="app_mode_block_selected">Bypass Proxy</string>
+    <string name="app_mode_allow_selected">Only Allow Selected</string>
+    <string name="app_mode_block_hint">Checked apps use direct network (bypass Proxy). Unchecked apps route through Proxy.</string>
+    <string name="app_mode_allow_hint">Only checked apps route through Proxy. All other apps use direct network.</string>
+    <string name="msg_app_rules_pending_apply">App rules changed while VPN is active</string>
+    <string name="action_apply_now">Apply Now</string>
+    <string name="msg_app_rules_applied">App routing rules applied to VPN</string>
+    <string name="hint_search_apps">Search app name or package…</string>
+    <string name="filter_apps_user">User</string>
+    <string name="filter_apps_system">System</string>
+    <string name="filter_apps_checked">Checked</string>
+    <string name="filter_apps_bypassed">No Proxy</string>
+    <string name="label_apps_block_count">Bypassed: %1$d apps</string>
+    <string name="label_apps_allow_count">Allowed: %1$d apps</string>
+    <string name="label_apps_all_checked_count">All %1$d apps using Proxy</string>
+    <string name="label_apps_using_and_bypassed_count">Proxy: %1$d • Bypassed: %2$d</string>
+    <string name="action_select_all">Check All</string>
+    <string name="action_clear_selection">Uncheck</string>
+    <string name="empty_apps_hint">No matching apps found.</string>
+    <string name="desc_app_icon">App icon</string>
+    <string name="desc_toggle_app_proxy">Check to use Proxy, uncheck to bypass Proxy</string>
+    <string name="badge_app_user">User</string>
+    <string name="badge_app_system">System</string>
+    <string name="badge_app_internet_yes">Internet</string>
+    <string name="badge_app_internet_no">No Internet</string>
+    <string name="badge_app_via_proxy">Proxy</string>
+    <string name="badge_app_bypass_proxy">Bypass</string>
+
+    <!-- Settings, Theme & Language -->
+    <string name="title_settings">Settings</string>
+    <string name="title_settings_card">Theme &amp; Language Settings</string>
+    <string name="action_open_settings">Open</string>
+    <string name="action_back">Back</string>
+    <string name="section_theme">Light / Dark Theme</string>
+    <string name="section_theme_subtitle">Defaults to system time • Custom choice is saved in SQLite</string>
+    <string name="theme_system">System Time (06:00–18:00 Light / Dark)</string>
+    <string name="theme_light">Light Mode</string>
+    <string name="theme_dark">Dark Mode</string>
+    <string name="theme_system_short">System Time</string>
+    <string name="theme_light_short">Light</string>
+    <string name="theme_dark_short">Dark</string>
+    <string name="section_language">Display Language</string>
+    <string name="section_language_subtitle">Defaults to system language • Custom choice is saved in SQLite</string>
+    <string name="lang_vietnamese">Tiếng Việt (Vietnamese)</string>
+    <string name="lang_english">English</string>
+    <string name="lang_system">Follow System Language</string>
+    <string name="setting_auto_stop_title">Auto stop</string>
+    <string name="setting_auto_stop_subtitle">Automatically stop service when disconnected</string>
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="settings_group_proxy">Proxy</string>
+    <string name="setting_theme_label">Theme</string>
+    <string name="setting_language_label">Language</string>
+    <string name="setting_vpn_timer_title">VPN Timer</string>
+    <string name="vpn_timer_always">Always</string>
+    <string name="vpn_timer_minutes">%1$d min</string>
+    <string name="vpn_timer_hours">%1$d hr</string>
+    <string name="vpn_timer_hours_minutes">%1$d hr %2$d min</string>
+    <string name="vpn_timer_custom">Custom…</string>
+    <string name="vpn_timer_custom_current">Custom (%1$s)</string>
+    <string name="vpn_timer_custom_dialog_title">Custom VPN Timer</string>
+    <string name="vpn_timer_custom_hint">Enter minutes (1 – 1440)</string>
+    <string name="vpn_timer_custom_invalid">Please enter a value between 1 and 1440 minutes</string>
+    <string name="action_confirm_timer">Save</string>
+    <string name="notif_text_timer_remaining">Local port :%1$d • %2$s left</string>
+    <string name="log_auto_stop_network_lost">Network connection lost — Proxy VPN service automatically stopped</string>
+    <string name="log_auto_stop_proxy_lost">Connection to Proxy %1$s lost (%2$s) — VPN service automatically stopped</string>
+    <string name="log_vpn_timer_set">VPN Timer active: auto-stop in %1$s</string>
+    <string name="log_vpn_timer_always">VPN Timer switched to Always</string>
+    <string name="log_vpn_timer_expired">VPN Timer expired (%1$s) — service automatically stopped</string>
+    <string name="label_app_version">Version: %1$s • 100%% Java</string>
+</resources>
