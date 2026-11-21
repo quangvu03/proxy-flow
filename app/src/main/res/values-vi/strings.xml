@@ -309,5 +309,5 @@
     <string name="log_private_routing_enabled">Đã bật định tuyến mạng riêng qua Proxy (%1$d phạm vi IP)</string>
     <string name="log_private_routing_disabled">Đã tắt định tuyến mạng riêng qua Proxy</string>
 
-    <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
+    <string name="label_app_version">Phiên bản: %1$s • Flutter 3.6.1</string>
 </resources>

@@ -22,8 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Pure Java scanner inspecting installed apps on the device via Play-compliant <queries>
- * intents (Launcher + HTTPS handlers), checking system status and INTERNET permission.
+ * Quét các ứng dụng đã cài đặt trên thiết bị bằng interen (tuân thủ chính sách của Play))
  */
 public final class InstalledAppScanner {
 

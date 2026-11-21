@@ -15,8 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Settings persistence in 100% Java:
- * - Theme mode defaults to SYSTEM_TIME (06:00-17:59 Light, 18:00-05:59 Dark) and saves
+ * - Theme mode defaults to SYSTEM_TIME and saves
  *   user overrides in SQLite (app_settings table).
  * - App language defaults to SYSTEM (device system language) and saves user overrides
  *   in SQLite (app_settings table).

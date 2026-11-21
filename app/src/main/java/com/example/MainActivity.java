@@ -38,9 +38,8 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.navigationrail.NavigationRailView;
 
 /**
- * Main entry Activity written 100% in Java.
- * Hosts adaptive BottomNavigationView / NavigationRailView, manages VPN & Notification
- * permissions, and routes between Connect, Proxy List, IP Check, Apps, and Logs tabs.
+ * Code viết bằng java, sử dụng Android SDK và các thư viện hỗ trợ của Android để xây dựng một ứng dụng quản lý VPN và proxy.
+ * phân quyền, router và tường lửa..
  */
 public class MainActivity extends AppCompatActivity implements ConnectFragment.HostActions {
 

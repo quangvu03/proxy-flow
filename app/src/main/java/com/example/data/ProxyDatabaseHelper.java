@@ -14,8 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Pure Java SQLite persistence for saved HTTP proxies, connection event logs,
- * app settings, and firewall rules.
+ * dùng sqlite để lưu trữ cấu hình proxy, nhật ký và cài đặt ứng dụng.
  */
 public class ProxyDatabaseHelper extends SQLiteOpenHelper {
 
