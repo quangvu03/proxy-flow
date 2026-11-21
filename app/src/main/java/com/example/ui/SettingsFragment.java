@@ -29,4 +29,13 @@ public class SettingsFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         SettingsUiHelper.bind(requireContext(), view);
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        View view = getView();
+        if (view != null) {
+            SettingsUiHelper.refreshSummaries(requireContext(), view);
+        }
+    }
 }

@@ -28,6 +28,16 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class LocalProxyServer {
 
+    public enum PolicyResult {
+        ALLOW,
+        BLOCK_FIREWALL,
+        BLOCK_PRIVATE_ROUTING_DISABLED
+    }
+
+    public interface PolicyChecker {
+        PolicyResult checkRequest(Socket clientSocket, String targetHost, int targetPort);
+    }
+
     public interface EventListener {
         void onUpstreamSuccess(long proxyId);
         void onUpstreamFailure(long proxyId, String reason);
@@ -46,10 +56,15 @@ public class LocalProxyServer {
     private ExecutorService clientPool;
     private Thread acceptThread;
     private EventListener eventListener;
+    private PolicyChecker policyChecker;
     private int localPort = 0;
 
     public void setEventListener(EventListener listener) {
         this.eventListener = listener;
+    }
+
+    public void setPolicyChecker(PolicyChecker checker) {
+        this.policyChecker = checker;
     }
 
     public void setActiveProxy(ProxyConfig proxy) {
@@ -145,12 +160,25 @@ public class LocalProxyServer {
                 return;
             }
 
+            String requestLine = lines[0];
+            boolean isConnect = requestLine.toUpperCase(Locale.ROOT).startsWith("CONNECT ");
+            TargetEndpoint endpoint = parseTargetEndpoint(requestLine, lines, isConnect);
+
+            PolicyChecker checker = this.policyChecker;
+            if (checker != null && endpoint != null && !endpoint.host.isEmpty()) {
+                PolicyResult policyResult = checker.checkRequest(client, endpoint.host, endpoint.port);
+                if (policyResult == PolicyResult.BLOCK_FIREWALL) {
+                    sendForbidden(clientOut, "Blocked by ProxyFlow Firewall");
+                    return;
+                } else if (policyResult == PolicyResult.BLOCK_PRIVATE_ROUTING_DISABLED) {
+                    sendForbidden(clientOut, "Private network routing via Proxy is disabled");
+                    return;
+                }
+            }
+
             upstream = new Socket();
             upstream.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), UPSTREAM_CONNECT_TIMEOUT_MS);
             upstream.setSoTimeout(30000);
-
-            String requestLine = lines[0];
-            boolean isConnect = requestLine.toUpperCase(Locale.ROOT).startsWith("CONNECT ");
 
             StringBuilder rebuilt = new StringBuilder();
             rebuilt.append(requestLine).append("\r\n");
@@ -284,6 +312,78 @@ public class LocalProxyServer {
             out.write(resp.getBytes(StandardCharsets.UTF_8));
             out.flush();
         } catch (IOException ignored) {
+        }
+    }
+
+    private void sendForbidden(OutputStream out, String message) {
+        try {
+            String resp = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n" + message;
+            out.write(resp.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static TargetEndpoint parseTargetEndpoint(String requestLine, String[] lines, boolean isConnect) {
+        String[] parts = requestLine.split(" ");
+        if (parts.length < 2) {
+            return null;
+        }
+        String target = parts[1].trim();
+        if (isConnect) {
+            return splitHostPort(target, 443);
+        }
+        if (target.startsWith("http://") || target.startsWith("https://")) {
+            boolean https = target.startsWith("https://");
+            String noScheme = target.substring(target.indexOf("://") + 3);
+            int slash = noScheme.indexOf('/');
+            String authority = slash >= 0 ? noScheme.substring(0, slash) : noScheme;
+            return splitHostPort(authority, https ? 443 : 80);
+        }
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.toLowerCase(Locale.ROOT).startsWith("host:")) {
+                String hostHeader = line.substring(5).trim();
+                return splitHostPort(hostHeader, 80);
+            }
+        }
+        return null;
+    }
+
+    private static TargetEndpoint splitHostPort(String authority, int defaultPort) {
+        if (authority == null || authority.isEmpty()) return null;
+        if (authority.startsWith("[")) {
+            int close = authority.indexOf(']');
+            if (close > 0) {
+                String host = authority.substring(1, close);
+                int port = defaultPort;
+                if (close + 1 < authority.length() && authority.charAt(close + 1) == ':') {
+                    try {
+                        port = Integer.parseInt(authority.substring(close + 2));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                return new TargetEndpoint(host, port);
+            }
+        }
+        int colon = authority.lastIndexOf(':');
+        if (colon > 0 && colon < authority.length() - 1) {
+            try {
+                int port = Integer.parseInt(authority.substring(colon + 1));
+                return new TargetEndpoint(authority.substring(0, colon), port);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return new TargetEndpoint(authority, defaultPort);
+    }
+
+    private static final class TargetEndpoint {
+        final String host;
+        final int port;
+
+        TargetEndpoint(String host, int port) {
+            this.host = host != null ? host : "";
+            this.port = port;
         }
     }
 

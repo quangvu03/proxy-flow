@@ -7,9 +7,11 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 
 import com.example.model.AppProxyRule;
+import com.example.network.PrivateNetworkMatcher;
 
 import java.util.Calendar;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -68,6 +70,9 @@ public class SettingsPreferences {
     public static final String SQLITE_KEY_LANGUAGE_TAG = "language_tag";
     public static final String SQLITE_KEY_AUTO_STOP_DISCONNECT = "auto_stop_on_disconnect";
     public static final String SQLITE_KEY_VPN_TIMER_MINUTES = "vpn_timer_minutes";
+    public static final String SQLITE_KEY_FIREWALL_ENABLED = "firewall_enabled";
+    public static final String SQLITE_KEY_PRIVATE_ROUTING_ENABLED = "private_network_routing_enabled";
+    public static final String SQLITE_KEY_PRIVATE_ROUTING_RANGES = "private_network_ranges";
     public static final int VPN_TIMER_ALWAYS = 0;
     public static final int VPN_TIMER_MAX_MINUTES = 1440;
 
@@ -180,6 +185,40 @@ public class SettingsPreferences {
     public void setVpnTimerMinutes(int minutes) {
         int safeMinutes = minutes <= 0 ? VPN_TIMER_ALWAYS : Math.min(minutes, VPN_TIMER_MAX_MINUTES);
         dbHelper.putSetting(SQLITE_KEY_VPN_TIMER_MINUTES, String.valueOf(safeMinutes));
+    }
+
+    public boolean isFirewallEnabled() {
+        String raw = dbHelper.getSetting(SQLITE_KEY_FIREWALL_ENABLED, "false");
+        return Boolean.parseBoolean(raw);
+    }
+
+    public void setFirewallEnabled(boolean enabled) {
+        dbHelper.putSetting(SQLITE_KEY_FIREWALL_ENABLED, String.valueOf(enabled));
+    }
+
+    public boolean isPrivateNetworkRoutingEnabled() {
+        String raw = dbHelper.getSetting(SQLITE_KEY_PRIVATE_ROUTING_ENABLED, "false");
+        return Boolean.parseBoolean(raw);
+    }
+
+    public void setPrivateNetworkRoutingEnabled(boolean enabled) {
+        dbHelper.putSetting(SQLITE_KEY_PRIVATE_ROUTING_ENABLED, String.valueOf(enabled));
+    }
+
+    public String getPrivateNetworkRangesText() {
+        if (!dbHelper.hasSetting(SQLITE_KEY_PRIVATE_ROUTING_RANGES)) {
+            return PrivateNetworkMatcher.getDefaultRangesText();
+        }
+        return dbHelper.getSetting(SQLITE_KEY_PRIVATE_ROUTING_RANGES, PrivateNetworkMatcher.getDefaultRangesText());
+    }
+
+    public List<String> getPrivateNetworkRangesList() {
+        return PrivateNetworkMatcher.parseRanges(getPrivateNetworkRangesText());
+    }
+
+    public void setPrivateNetworkRangesText(String rangesText) {
+        String value = rangesText != null ? rangesText.trim() : "";
+        dbHelper.putSetting(SQLITE_KEY_PRIVATE_ROUTING_RANGES, value);
     }
 
     public static void applySavedThemeAndLocale(Context context) {

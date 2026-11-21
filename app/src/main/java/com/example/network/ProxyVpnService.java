@@ -16,6 +16,7 @@ import android.net.ProxyInfo;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
+import android.system.OsConstants;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
@@ -27,6 +28,7 @@ import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
 import com.example.model.AppProxyRule;
 import com.example.model.ConnectionStatus;
+import com.example.model.FirewallRule;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
 
@@ -34,6 +36,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -49,14 +54,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * Android VpnService that establishes a system-level proxy tunnel backed by
  * LocalProxyServer using a fixed user-selected HTTP proxy (with user/pass auth).
  * Never switches or rotates proxies automatically; proxy changes occur only on
- * explicit user action. Supports per-app allowlist / blocklist routing.
+ * explicit user action. Supports per-app allowlist / blocklist routing, firewall
+ * app-blocking rules, and private network IP routing through the upstream proxy.
  */
-public class ProxyVpnService extends VpnService implements LocalProxyServer.EventListener {
+public class ProxyVpnService extends VpnService
+        implements LocalProxyServer.EventListener, LocalProxyServer.PolicyChecker {
 
     public static final String ACTION_START = "com.example.action.START_VPN";
     public static final String ACTION_STOP = "com.example.action.STOP_VPN";
     public static final String ACTION_SWITCH_TO_PROXY = "com.example.action.SWITCH_TO_PROXY";
     public static final String ACTION_REAPPLY_APP_RULES = "com.example.action.REAPPLY_APP_RULES";
+    public static final String ACTION_REAPPLY_POLICIES = "com.example.action.REAPPLY_POLICIES";
     public static final String ACTION_UPDATE_VPN_TIMER = "com.example.action.UPDATE_VPN_TIMER";
     public static final String EXTRA_PROXY_ID = "extra_proxy_id";
 
@@ -96,6 +104,11 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
     private volatile long vpnTimerDeadlineMs = 0L;
     private volatile int activeVpnTimerMinutes = SettingsPreferences.VPN_TIMER_ALWAYS;
     private volatile ProxyConfig activeProxy = null;
+    private volatile boolean firewallEnabledSnapshot = false;
+    private volatile List<FirewallRule> activeFirewallRulesSnapshot = java.util.Collections.emptyList();
+    private volatile boolean privateRoutingEnabledSnapshot = false;
+    private volatile List<String> privateRoutingRangesSnapshot = PrivateNetworkMatcher.DEFAULT_PRIVATE_RANGES;
+    private final AtomicLong lastFirewallBlockLogMs = new AtomicLong(0L);
 
     public static void startVpn(Context context, long proxyId) {
         Intent intent = new Intent(context, ProxyVpnService.class);
@@ -135,6 +148,12 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         context.startService(intent);
     }
 
+    public static void reapplyFirewallAndRouting(Context context) {
+        Intent intent = new Intent(context, ProxyVpnService.class);
+        intent.setAction(ACTION_REAPPLY_POLICIES);
+        context.startService(intent);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -144,6 +163,8 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         localProxyServer = new LocalProxyServer();
         localProxyServer.setEventListener(this);
+        localProxyServer.setPolicyChecker(this);
+        refreshPolicySnapshots();
         createNotificationChannel();
     }
 
@@ -165,6 +186,11 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
 
         if (ACTION_REAPPLY_APP_RULES.equals(action)) {
             reapplyAppRulesAsync();
+            return START_STICKY;
+        }
+
+        if (ACTION_REAPPLY_POLICIES.equals(action)) {
+            reapplyPoliciesAsync();
             return START_STICKY;
         }
 
@@ -270,6 +296,8 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             tunInterface = null;
         }
 
+        refreshPolicySnapshots();
+
         Builder builder = new Builder();
         builder.setSession("ProxyFlow - " + proxy.getAddressDisplay());
         builder.addAddress("10.0.0.2", 32);
@@ -279,7 +307,19 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
         applyPerAppRules(builder);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localPort));
+            if (privateRoutingEnabledSnapshot) {
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localPort));
+            } else {
+                List<String> exclList = Arrays.asList(
+                        "localhost", "127.0.0.1", "10.*",
+                        "172.16.*", "172.17.*", "172.18.*", "172.19.*",
+                        "172.20.*", "172.21.*", "172.22.*", "172.23.*",
+                        "172.24.*", "172.25.*", "172.26.*", "172.27.*",
+                        "172.28.*", "172.29.*", "172.30.*", "172.31.*",
+                        "192.168.*", "169.254.*"
+                );
+                builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", localPort, exclList));
+            }
         }
 
         tunInterface = builder.establish();
@@ -340,8 +380,11 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
 
     private void applyPerAppRules(Builder builder) {
         AppProxyRule rule = repository.getAppProxyRuleSync();
+        Set<String> firewallBlocked = getFullInternetFirewallBlockedPackages();
+
         if (rule.getMode() == AppProxyRule.Mode.ALLOW_SELECTED) {
-            Set<String> allowed = rule.getSelectedPackages();
+            Set<String> allowed = new HashSet<>(rule.getSelectedPackages());
+            allowed.addAll(firewallBlocked);
             if (!allowed.isEmpty()) {
                 for (String pkg : allowed) {
                     if (!getPackageName().equals(pkg)) {
@@ -370,12 +413,54 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             } catch (PackageManager.NameNotFoundException ignored) {
             }
             for (String pkg : rule.getSelectedPackages()) {
+                if (firewallBlocked.contains(pkg)) {
+                    // Firewall takes priority: trap blocked apps inside VPN tunnel so internet is blocked
+                    continue;
+                }
                 try {
                     builder.addDisallowedApplication(pkg);
                 } catch (PackageManager.NameNotFoundException ignored) {
                 }
             }
         }
+    }
+
+    private Set<String> getFullInternetFirewallBlockedPackages() {
+        Set<String> blocked = new HashSet<>();
+        if (!firewallEnabledSnapshot) {
+            return blocked;
+        }
+        for (FirewallRule fwRule : activeFirewallRulesSnapshot) {
+            if (fwRule.isEnabled() && fwRule.blocksAllInternet()) {
+                blocked.addAll(fwRule.getBlockedPackages());
+            }
+        }
+        return blocked;
+    }
+
+    private void refreshPolicySnapshots() {
+        firewallEnabledSnapshot = settingsPreferences != null && settingsPreferences.isFirewallEnabled();
+        activeFirewallRulesSnapshot = repository != null
+                ? repository.getFirewallRulesSync()
+                : java.util.Collections.emptyList();
+        privateRoutingEnabledSnapshot = settingsPreferences != null
+                && settingsPreferences.isPrivateNetworkRoutingEnabled();
+        privateRoutingRangesSnapshot = settingsPreferences != null
+                ? settingsPreferences.getPrivateNetworkRangesList()
+                : PrivateNetworkMatcher.DEFAULT_PRIVATE_RANGES;
+    }
+
+    private void reapplyPoliciesAsync() {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            refreshPolicySnapshots();
+            if (!isRunning.get() || activeProxy == null) return;
+            try {
+                establishVpnInterface(activeProxy, localProxyServer.getLocalPort());
+            } catch (IOException e) {
+                repository.addLog(ProxyLogEntry.Level.ERROR,
+                        "Không thể cập nhật tường lửa / định tuyến VPN: " + e.getMessage());
+            }
+        });
     }
 
     private void reapplyAppRulesAsync() {
@@ -624,6 +709,66 @@ public class ProxyVpnService extends VpnService implements LocalProxyServer.Even
             healthProbeExecutor = null;
         }
         healthProbeInFlight.set(false);
+    }
+
+    @Override
+    public LocalProxyServer.PolicyResult checkRequest(Socket clientSocket, String targetHost, int targetPort) {
+        if (!privateRoutingEnabledSnapshot
+                && PrivateNetworkMatcher.isPrivateOrConfiguredTarget(targetHost, privateRoutingRangesSnapshot)) {
+            return LocalProxyServer.PolicyResult.BLOCK_PRIVATE_ROUTING_DISABLED;
+        }
+        if (firewallEnabledSnapshot && !activeFirewallRulesSnapshot.isEmpty()) {
+            String[] callerPackages = resolveCallerPackages(clientSocket);
+            for (FirewallRule fwRule : activeFirewallRulesSnapshot) {
+                if (!fwRule.isEnabled()) continue;
+                boolean matchesApp = false;
+                if (fwRule.getBlockedPackages().isEmpty()) {
+                    // Rule with target filter but no specific apps applies globally
+                    matchesApp = !fwRule.blocksAllInternet();
+                } else if (callerPackages != null) {
+                    for (String pkg : callerPackages) {
+                        if (fwRule.appliesToPackage(pkg)) {
+                            matchesApp = true;
+                            break;
+                        }
+                    }
+                }
+                if (matchesApp && fwRule.matchesTarget(targetHost, targetPort)) {
+                    logFirewallBlock(callerPackages != null && callerPackages.length > 0 ? callerPackages[0] : fwRule.getName(),
+                            targetHost + ":" + targetPort);
+                    return LocalProxyServer.PolicyResult.BLOCK_FIREWALL;
+                }
+            }
+        }
+        return LocalProxyServer.PolicyResult.ALLOW;
+    }
+
+    private String[] resolveCallerPackages(Socket clientSocket) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || connectivityManager == null || clientSocket == null) {
+            return null;
+        }
+        try {
+            InetSocketAddress remote = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
+            InetSocketAddress local = (InetSocketAddress) clientSocket.getLocalSocketAddress();
+            if (remote == null || local == null) {
+                return null;
+            }
+            int uid = connectivityManager.getConnectionOwnerUid(OsConstants.IPPROTO_TCP, remote, local);
+            if (uid > 0) {
+                return getPackageManager().getPackagesForUid(uid);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void logFirewallBlock(String appOrRule, String destination) {
+        long now = System.currentTimeMillis();
+        long prev = lastFirewallBlockLogMs.get();
+        if (now - prev >= 5_000L && lastFirewallBlockLogMs.compareAndSet(prev, now)) {
+            repository.addLog(ProxyLogEntry.Level.WARN,
+                    getString(R.string.log_firewall_blocked_request, appOrRule, destination));
+        }
     }
 
     @Override

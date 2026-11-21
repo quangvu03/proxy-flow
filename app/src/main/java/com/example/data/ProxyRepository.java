@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.model.AppProxyRule;
+import com.example.model.FirewallRule;
 import com.example.model.InstalledAppInfo;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
@@ -41,6 +42,7 @@ public class ProxyRepository {
     private final MutableLiveData<AppProxyRule> appProxyRuleLiveData = new MutableLiveData<>();
     private final MutableLiveData<List<InstalledAppInfo>> installedAppsLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<Boolean> scanningAppsLiveData = new MutableLiveData<>(false);
+    private final MutableLiveData<List<FirewallRule>> firewallRulesLiveData = new MutableLiveData<>(new ArrayList<>());
 
     private ProxyRepository(Context context) {
         this.appContext = context.getApplicationContext();
@@ -89,6 +91,65 @@ public class ProxyRepository {
 
     public LiveData<Boolean> isScanningApps() {
         return scanningAppsLiveData;
+    }
+
+    public LiveData<List<FirewallRule>> getFirewallRules() {
+        return firewallRulesLiveData;
+    }
+
+    public List<FirewallRule> getFirewallRulesSync() {
+        return dbHelper.getAllFirewallRules();
+    }
+
+    public Set<String> getFirewallBlockedPackagesSync() {
+        Set<String> blocked = new HashSet<>();
+        if (!prefs.isFirewallEnabled()) {
+            return blocked;
+        }
+        for (FirewallRule rule : dbHelper.getAllFirewallRules()) {
+            if (rule.isEnabled()) {
+                blocked.addAll(rule.getBlockedPackages());
+            }
+        }
+        return blocked;
+    }
+
+    public void reloadFirewallRules() {
+        ioExecutor.execute(() -> firewallRulesLiveData.postValue(dbHelper.getAllFirewallRules()));
+    }
+
+    public void saveFirewallRule(FirewallRule rule, Runnable onComplete) {
+        ioExecutor.execute(() -> {
+            if (rule.getId() > 0) {
+                dbHelper.updateFirewallRule(rule);
+            } else {
+                dbHelper.insertFirewallRule(rule);
+            }
+            firewallRulesLiveData.postValue(dbHelper.getAllFirewallRules());
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        });
+    }
+
+    public void setFirewallRuleEnabled(long ruleId, boolean enabled, Runnable onComplete) {
+        ioExecutor.execute(() -> {
+            dbHelper.setFirewallRuleEnabled(ruleId, enabled);
+            firewallRulesLiveData.postValue(dbHelper.getAllFirewallRules());
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        });
+    }
+
+    public void deleteFirewallRule(long ruleId, Runnable onComplete) {
+        ioExecutor.execute(() -> {
+            dbHelper.deleteFirewallRule(ruleId);
+            firewallRulesLiveData.postValue(dbHelper.getAllFirewallRules());
+            if (onComplete != null) {
+                onComplete.run();
+            }
+        });
     }
 
     public AppProxyRule getAppProxyRuleSync() {
@@ -211,6 +272,7 @@ public class ProxyRepository {
             }
             selectedProxyLiveData.postValue(selected);
             logsLiveData.postValue(dbHelper.getRecentLogs());
+            firewallRulesLiveData.postValue(dbHelper.getAllFirewallRules());
         });
     }
 

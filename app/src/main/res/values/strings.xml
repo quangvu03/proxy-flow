@@ -255,5 +255,59 @@
     <string name="log_vpn_timer_set">Hẹn giờ VPN: tự động ngắt sau %1$s</string>
     <string name="log_vpn_timer_always">Hẹn giờ VPN đã chuyển sang chế độ Luôn luôn</string>
     <string name="log_vpn_timer_expired">Đã hết thời gian hẹn giờ VPN (%1$s) — tự động dừng dịch vụ</string>
+
+    <!-- Firewall & Private Network Routing -->
+    <string name="settings_group_firewall">Tường lửa</string>
+    <string name="setting_firewall_enable_title">Kích hoạt tường lửa</string>
+    <string name="setting_firewall_enable_subtitle">Chặn 1 số ứng dụng nhất định truy cập internet</string>
+    <string name="setting_firewall_rules_title">Quy tắc tường lửa</string>
+    <string name="setting_firewall_rules_default_sub">Định cấu hình Quy tắc 1</string>
+    <string name="setting_firewall_rules_summary_single">Định cấu hình %1$s</string>
+    <string name="setting_firewall_rules_summary_multi">Định cấu hình %1$s (+%2$d quy tắc)</string>
+    <string name="setting_firewall_rules_empty_sub">Chưa có quy tắc • Nhấn để thêm quy tắc</string>
+    <string name="setting_private_routing_title">Định tuyến mạng riêng</string>
+    <string name="setting_private_routing_subtitle">Định tuyến các phạm vi và địa chỉ IP riêng thông qua Proxy</string>
+    <string name="setting_private_routing_subtitle_count">Đang bật (%1$d phạm vi IP riêng qua Proxy)</string>
+
+    <string name="title_firewall_rules">Quy tắc tường lửa</string>
+    <string name="firewall_rule_default_name">Quy tắc 1</string>
+    <string name="firewall_rule_name_template">Quy tắc %1$d</string>
+    <string name="firewall_status_active_banner">Tường lửa đang bật • %1$d quy tắc hoạt động (%2$d ứng dụng bị chặn)</string>
+    <string name="firewall_status_inactive_banner">Tường lửa đang tắt • Quy tắc sẽ áp dụng khi bạn kích hoạt</string>
+    <string name="action_add_firewall_rule">Thêm quy tắc</string>
+    <string name="action_configure_rule">Cấu hình</string>
+    <string name="title_edit_firewall_rule">Cấu hình quy tắc tường lửa</string>
+    <string name="title_add_firewall_rule">Thêm quy tắc tường lửa</string>
+    <string name="hint_firewall_rule_name">Tên quy tắc (VD: Quy tắc 1)</string>
+    <string name="hint_firewall_target_address">IP / Tên miền / Cổng đích (để trống = chặn toàn bộ Internet)</string>
+    <string name="label_firewall_rule_enabled">Kích hoạt quy tắc này</string>
+    <string name="label_firewall_select_apps">Ứng dụng bị chặn truy cập Internet</string>
+    <string name="action_pick_firewall_apps">Chọn ứng dụng (%1$d đã chọn)</string>
+    <string name="firewall_rule_apps_none">Chưa chọn ứng dụng nào (nhấn Cấu hình để chọn)</string>
+    <string name="firewall_rule_apps_summary">%1$d ứng dụng bị chặn: %2$s</string>
+    <string name="firewall_rule_target_all">Phạm vi: Chặn toàn bộ truy cập Internet</string>
+    <string name="firewall_rule_target_custom">Mục tiêu đích: %1$s</string>
+    <string name="error_firewall_rule_name_required">Vui lòng nhập tên quy tắc</string>
+    <string name="msg_firewall_rule_saved">Đã lưu quy tắc tường lửa</string>
+    <string name="msg_firewall_rule_deleted">Đã xóa quy tắc %1$s</string>
+    <string name="msg_firewall_delete_title">Xóa quy tắc tường lửa?</string>
+    <string name="msg_firewall_delete_body">Bạn có chắc muốn xóa %1$s?</string>
+    <string name="empty_firewall_rules">Chưa có quy tắc tường lửa nào.\nNhấn "Thêm quy tắc" để tạo mới.</string>
+    <string name="title_pick_blocked_apps">Chọn ứng dụng chặn Internet</string>
+    <string name="action_done">Xong</string>
+    <string name="log_firewall_toggled_on">Đã kích hoạt tường lửa (%1$d quy tắc đang bật)</string>
+    <string name="log_firewall_toggled_off">Đã tắt tường lửa</string>
+    <string name="log_firewall_blocked_request">Tường lửa đã chặn %1$s truy cập %2$s</string>
+
+    <string name="title_private_routing_dialog">Định tuyến mạng riêng qua Proxy</string>
+    <string name="desc_private_routing_dialog">Khi bật, các phạm vi và địa chỉ IP riêng (LAN / nội bộ) dưới đây sẽ được định tuyến đi qua Proxy thay vì bỏ qua.</string>
+    <string name="label_private_routing_toggle">Định tuyến IP riêng qua Proxy</string>
+    <string name="hint_private_ip_ranges">Mỗi dòng 1 IP hoặc phạm vi CIDR (VD: 192.168.1.0/24 hoặc 10.0.0.5)</string>
+    <string name="action_reset_default_ranges">Mặc định</string>
+    <string name="msg_private_routing_saved">Đã cập nhật danh sách phạm vi IP riêng</string>
+    <string name="error_private_ip_ranges_invalid">Có địa chỉ IP hoặc CIDR không hợp lệ: %1$s</string>
+    <string name="log_private_routing_enabled">Đã bật định tuyến mạng riêng qua Proxy (%1$d phạm vi IP)</string>
+    <string name="log_private_routing_disabled">Đã tắt định tuyến mạng riêng qua Proxy</string>
+
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

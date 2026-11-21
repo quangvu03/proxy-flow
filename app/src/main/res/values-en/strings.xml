@@ -255,5 +255,59 @@
     <string name="log_vpn_timer_set">VPN Timer active: auto-stop in %1$s</string>
     <string name="log_vpn_timer_always">VPN Timer switched to Always</string>
     <string name="log_vpn_timer_expired">VPN Timer expired (%1$s) — service automatically stopped</string>
+
+    <!-- Firewall & Private Network Routing -->
+    <string name="settings_group_firewall">Firewall</string>
+    <string name="setting_firewall_enable_title">Enable firewall</string>
+    <string name="setting_firewall_enable_subtitle">Block certain apps from accessing the internet</string>
+    <string name="setting_firewall_rules_title">Firewall rules</string>
+    <string name="setting_firewall_rules_default_sub">Configure Rule 1</string>
+    <string name="setting_firewall_rules_summary_single">Configure %1$s</string>
+    <string name="setting_firewall_rules_summary_multi">Configure %1$s (+%2$d more)</string>
+    <string name="setting_firewall_rules_empty_sub">No rules yet • Tap to add a rule</string>
+    <string name="setting_private_routing_title">Private network routing</string>
+    <string name="setting_private_routing_subtitle">Route private IP ranges and addresses through the Proxy</string>
+    <string name="setting_private_routing_subtitle_count">Active (%1$d private IP ranges via Proxy)</string>
+
+    <string name="title_firewall_rules">Firewall Rules</string>
+    <string name="firewall_rule_default_name">Rule 1</string>
+    <string name="firewall_rule_name_template">Rule %1$d</string>
+    <string name="firewall_status_active_banner">Firewall enabled • %1$d active rules (%2$d apps blocked)</string>
+    <string name="firewall_status_inactive_banner">Firewall disabled • Rules will apply once enabled</string>
+    <string name="action_add_firewall_rule">Add rule</string>
+    <string name="action_configure_rule">Configure</string>
+    <string name="title_edit_firewall_rule">Configure Firewall Rule</string>
+    <string name="title_add_firewall_rule">Add Firewall Rule</string>
+    <string name="hint_firewall_rule_name">Rule name (e.g. Rule 1)</string>
+    <string name="hint_firewall_target_address">Target IP / Domain / Port (blank = block all internet)</string>
+    <string name="label_firewall_rule_enabled">Enable this rule</string>
+    <string name="label_firewall_select_apps">Apps blocked from internet access</string>
+    <string name="action_pick_firewall_apps">Select apps (%1$d selected)</string>
+    <string name="firewall_rule_apps_none">No apps selected (tap Configure to choose)</string>
+    <string name="firewall_rule_apps_summary">%1$d blocked apps: %2$s</string>
+    <string name="firewall_rule_target_all">Scope: Block all internet access</string>
+    <string name="firewall_rule_target_custom">Target filter: %1$s</string>
+    <string name="error_firewall_rule_name_required">Please enter a rule name</string>
+    <string name="msg_firewall_rule_saved">Firewall rule saved</string>
+    <string name="msg_firewall_rule_deleted">Deleted rule %1$s</string>
+    <string name="msg_firewall_delete_title">Delete firewall rule?</string>
+    <string name="msg_firewall_delete_body">Are you sure you want to delete %1$s?</string>
+    <string name="empty_firewall_rules">No firewall rules configured.\nTap "Add rule" to create one.</string>
+    <string name="title_pick_blocked_apps">Select Apps to Block Internet</string>
+    <string name="action_done">Done</string>
+    <string name="log_firewall_toggled_on">Firewall enabled (%1$d active rules)</string>
+    <string name="log_firewall_toggled_off">Firewall disabled</string>
+    <string name="log_firewall_blocked_request">Firewall blocked %1$s from accessing %2$s</string>
+
+    <string name="title_private_routing_dialog">Private Network Routing via Proxy</string>
+    <string name="desc_private_routing_dialog">When enabled, private (LAN / internal) IP ranges and addresses below are routed through the upstream Proxy instead of bypassing it.</string>
+    <string name="label_private_routing_toggle">Route private IPs through Proxy</string>
+    <string name="hint_private_ip_ranges">One IP or CIDR range per line (e.g. 192.168.1.0/24 or 10.0.0.5)</string>
+    <string name="action_reset_default_ranges">Defaults</string>
+    <string name="msg_private_routing_saved">Updated private IP routing ranges</string>
+    <string name="error_private_ip_ranges_invalid">Invalid IP address or CIDR entry: %1$s</string>
+    <string name="log_private_routing_enabled">Private network routing via Proxy enabled (%1$d IP ranges)</string>
+    <string name="log_private_routing_disabled">Private network routing via Proxy disabled</string>
+
     <string name="label_app_version">Version: %1$s • 100%% Java</string>
 </resources>

@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import com.example.model.FirewallRule;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
 
@@ -13,12 +14,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Pure Java SQLite persistence for saved HTTP proxies and connection event logs.
+ * Pure Java SQLite persistence for saved HTTP proxies, connection event logs,
+ * app settings, and firewall rules.
  */
 public class ProxyDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "proxyflow.db";
-    private static final int DATABASE_VERSION = 2;
+    private static final int DATABASE_VERSION = 3;
 
     private static volatile ProxyDatabaseHelper instance;
 
@@ -46,6 +48,15 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     private static final String TABLE_SETTINGS = "app_settings";
     private static final String COL_SETTING_KEY = "setting_key";
     private static final String COL_SETTING_VALUE = "setting_value";
+
+    private static final String TABLE_FIREWALL_RULES = "firewall_rules";
+    private static final String COL_FW_ID = "id";
+    private static final String COL_FW_NAME = "name";
+    private static final String COL_FW_ENABLED = "enabled";
+    private static final String COL_FW_PACKAGES = "blocked_packages";
+    private static final String COL_FW_TARGET = "target_address";
+    private static final String COL_FW_CREATED_AT = "created_at";
+    private static final String KEY_FIREWALL_SEEDED = "firewall_rules_seeded";
 
     public static ProxyDatabaseHelper getInstance(Context context) {
         if (instance == null) {
@@ -90,6 +101,7 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(createLogs);
 
         createSettingsTable(db);
+        createFirewallRulesTableAndSeed(db);
     }
 
     private void createSettingsTable(SQLiteDatabase db) {
@@ -100,10 +112,53 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(createSettings);
     }
 
+    private void createFirewallRulesTableAndSeed(SQLiteDatabase db) {
+        String createFirewall = "CREATE TABLE IF NOT EXISTS " + TABLE_FIREWALL_RULES + " ("
+                + COL_FW_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
+                + COL_FW_NAME + " TEXT NOT NULL, "
+                + COL_FW_ENABLED + " INTEGER NOT NULL DEFAULT 1, "
+                + COL_FW_PACKAGES + " TEXT NOT NULL DEFAULT '', "
+                + COL_FW_TARGET + " TEXT NOT NULL DEFAULT '', "
+                + COL_FW_CREATED_AT + " INTEGER NOT NULL DEFAULT 0"
+                + ")";
+        db.execSQL(createFirewall);
+
+        boolean seeded = false;
+        try (Cursor c = db.query(TABLE_SETTINGS, new String[]{COL_SETTING_VALUE},
+                COL_SETTING_KEY + " = ?", new String[]{KEY_FIREWALL_SEEDED}, null, null, null)) {
+            seeded = c.moveToFirst() && "true".equals(c.getString(0));
+        }
+        if (!seeded) {
+            long count = 0;
+            try (Cursor countCursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_FIREWALL_RULES, null)) {
+                if (countCursor.moveToFirst()) {
+                    count = countCursor.getLong(0);
+                }
+            }
+            if (count == 0) {
+                ContentValues cv = new ContentValues();
+                cv.put(COL_FW_NAME, "Quy tắc 1");
+                cv.put(COL_FW_ENABLED, 1);
+                cv.put(COL_FW_PACKAGES, "");
+                cv.put(COL_FW_TARGET, "");
+                cv.put(COL_FW_CREATED_AT, System.currentTimeMillis());
+                db.insert(TABLE_FIREWALL_RULES, null, cv);
+            }
+            ContentValues seedFlag = new ContentValues();
+            seedFlag.put(COL_SETTING_KEY, KEY_FIREWALL_SEEDED);
+            seedFlag.put(COL_SETTING_VALUE, "true");
+            db.insertWithOnConflict(TABLE_SETTINGS, null, seedFlag, SQLiteDatabase.CONFLICT_REPLACE);
+        }
+    }
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
             createSettingsTable(db);
+        }
+        if (oldVersion < 3) {
+            createSettingsTable(db);
+            createFirewallRulesTableAndSeed(db);
         }
     }
 
@@ -257,6 +312,70 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     public synchronized void clearLogs() {
         SQLiteDatabase db = getWritableDatabase();
         db.delete(TABLE_LOGS, null, null);
+    }
+
+    public synchronized List<FirewallRule> getAllFirewallRules() {
+        List<FirewallRule> list = new ArrayList<>();
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor cursor = db.query(TABLE_FIREWALL_RULES, null, null, null, null, null,
+                COL_FW_ID + " ASC")) {
+            int idxId = cursor.getColumnIndexOrThrow(COL_FW_ID);
+            int idxName = cursor.getColumnIndexOrThrow(COL_FW_NAME);
+            int idxEnabled = cursor.getColumnIndexOrThrow(COL_FW_ENABLED);
+            int idxPkgs = cursor.getColumnIndexOrThrow(COL_FW_PACKAGES);
+            int idxTarget = cursor.getColumnIndexOrThrow(COL_FW_TARGET);
+            int idxCreated = cursor.getColumnIndexOrThrow(COL_FW_CREATED_AT);
+            while (cursor.moveToNext()) {
+                list.add(new FirewallRule(
+                        cursor.getLong(idxId),
+                        cursor.getString(idxName),
+                        cursor.getInt(idxEnabled) == 1,
+                        FirewallRule.deserializePackages(cursor.getString(idxPkgs)),
+                        cursor.getString(idxTarget),
+                        cursor.getLong(idxCreated)
+                ));
+            }
+        }
+        return list;
+    }
+
+    public synchronized long insertFirewallRule(FirewallRule rule) {
+        if (rule == null) return -1L;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = toFirewallContentValues(rule);
+        long id = db.insert(TABLE_FIREWALL_RULES, null, cv);
+        rule.setId(id);
+        return id;
+    }
+
+    public synchronized int updateFirewallRule(FirewallRule rule) {
+        if (rule == null || rule.getId() <= 0) return 0;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = toFirewallContentValues(rule);
+        return db.update(TABLE_FIREWALL_RULES, cv, COL_FW_ID + " = ?",
+                new String[]{String.valueOf(rule.getId())});
+    }
+
+    public synchronized void setFirewallRuleEnabled(long ruleId, boolean enabled) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put(COL_FW_ENABLED, enabled ? 1 : 0);
+        db.update(TABLE_FIREWALL_RULES, cv, COL_FW_ID + " = ?", new String[]{String.valueOf(ruleId)});
+    }
+
+    public synchronized int deleteFirewallRule(long ruleId) {
+        SQLiteDatabase db = getWritableDatabase();
+        return db.delete(TABLE_FIREWALL_RULES, COL_FW_ID + " = ?", new String[]{String.valueOf(ruleId)});
+    }
+
+    private ContentValues toFirewallContentValues(FirewallRule rule) {
+        ContentValues cv = new ContentValues();
+        cv.put(COL_FW_NAME, rule.getName());
+        cv.put(COL_FW_ENABLED, rule.isEnabled() ? 1 : 0);
+        cv.put(COL_FW_PACKAGES, FirewallRule.serializePackages(rule.getBlockedPackages()));
+        cv.put(COL_FW_TARGET, rule.getTargetAddress());
+        cv.put(COL_FW_CREATED_AT, rule.getCreatedAt() > 0 ? rule.getCreatedAt() : System.currentTimeMillis());
+        return cv;
     }
 
     private ContentValues toContentValues(ProxyConfig proxy) {
