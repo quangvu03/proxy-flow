@@ -11,7 +11,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
 import com.example.BuildConfig;
@@ -24,7 +23,6 @@ import com.example.data.SettingsPreferences.ThemeMode;
 import com.example.model.FirewallRule;
 import com.example.model.ProxyLogEntry;
 import com.example.network.PrivateNetworkMatcher;
-import com.example.network.ProxyNotificationManager;
 import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyVpnService;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -53,11 +51,6 @@ public final class SettingsUiHelper {
     }
 
     public static void bind(@NonNull Context context, @NonNull View root) {
-        bind(context, root, null);
-    }
-
-    public static void bind(@NonNull Context context, @NonNull View root,
-                            @Nullable Runnable requestNotificationPermission) {
         SettingsPreferences settingsPrefs = new SettingsPreferences(context);
         ProxyRepository repository = ProxyRepository.getInstance(context);
 
@@ -73,11 +66,7 @@ public final class SettingsUiHelper {
         View rowVpnTimer = root.findViewById(R.id.row_setting_vpn_timer);
         TextView tvVpnTimerValue = root.findViewById(R.id.tv_vpn_timer_value);
 
-        View rowNotificationsEnable = root.findViewById(R.id.row_notifications_enable);
-        MaterialSwitch switchNotifications = root.findViewById(R.id.switch_notifications_enabled);
-
-        View rowNotificationTypes = root.findViewById(R.id.row_notification_types);
-        TextView tvNotificationTypesValue = root.findViewById(R.id.tv_notification_types_value);
+        View rowNotifications = root.findViewById(R.id.row_setting_notifications);
 
         View rowFirewallEnable = root.findViewById(R.id.row_firewall_enable);
         MaterialSwitch switchFirewall = root.findViewById(R.id.switch_firewall_enabled);
@@ -98,28 +87,9 @@ public final class SettingsUiHelper {
                 settingsPrefs.setAutoStopOnDisconnectEnabled(isChecked));
         rowAutoStop.setOnClickListener(v -> switchAutoStop.toggle());
 
-        if (switchNotifications != null && rowNotificationsEnable != null) {
-            switchNotifications.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                if (!buttonView.isPressed() && isChecked == settingsPrefs.isNotificationsEnabled()) {
-                    return;
-                }
-                settingsPrefs.setNotificationsEnabled(isChecked);
-                if (tvNotificationTypesValue != null) {
-                    tvNotificationTypesValue.setText(formatNotificationTypesSummary(context, settingsPrefs));
-                }
-                if (isChecked && !ProxyNotificationManager.hasNotificationPermission(context)
-                        && requestNotificationPermission != null) {
-                    requestNotificationPermission.run();
-                }
-                refreshVpnNotificationsIfRunning(context);
-            });
-            rowNotificationsEnable.setOnClickListener(v -> switchNotifications.toggle());
-        }
-
-        if (rowNotificationTypes != null) {
-            rowNotificationTypes.setOnClickListener(v -> showNotificationTypesDialog(
-                    context, settingsPrefs, switchNotifications, tvNotificationTypesValue,
-                    requestNotificationPermission));
+        if (rowNotifications != null) {
+            rowNotifications.setOnClickListener(v ->
+                    context.startActivity(new Intent(context, NotificationsSettingsActivity.class)));
         }
 
         rowTheme.setOnClickListener(v -> showThemeDialog(context, settingsPrefs, tvThemeValue));
@@ -179,8 +149,7 @@ public final class SettingsUiHelper {
         TextView tvLanguageValue = root.findViewById(R.id.tv_language_value);
         MaterialSwitch switchAutoStop = root.findViewById(R.id.switch_auto_stop_disconnect);
         TextView tvVpnTimerValue = root.findViewById(R.id.tv_vpn_timer_value);
-        MaterialSwitch switchNotifications = root.findViewById(R.id.switch_notifications_enabled);
-        TextView tvNotificationTypesValue = root.findViewById(R.id.tv_notification_types_value);
+        TextView tvNotificationsSummary = root.findViewById(R.id.tv_notifications_summary);
         MaterialSwitch switchFirewall = root.findViewById(R.id.switch_firewall_enabled);
         TextView tvFirewallRulesValue = root.findViewById(R.id.tv_firewall_rules_value);
         TextView tvPrivateRoutingSubtitle = root.findViewById(R.id.tv_private_routing_subtitle);
@@ -198,11 +167,8 @@ public final class SettingsUiHelper {
         if (tvVpnTimerValue != null) {
             tvVpnTimerValue.setText(formatTimerLabel(context, settingsPrefs.getVpnTimerMinutes()));
         }
-        if (switchNotifications != null) {
-            switchNotifications.setChecked(settingsPrefs.isNotificationsEnabled());
-        }
-        if (tvNotificationTypesValue != null) {
-            tvNotificationTypesValue.setText(formatNotificationTypesSummary(context, settingsPrefs));
+        if (tvNotificationsSummary != null) {
+            tvNotificationsSummary.setText(formatNotificationTypesSummary(context, settingsPrefs));
         }
         if (switchFirewall != null) {
             switchFirewall.setChecked(settingsPrefs.isFirewallEnabled());
@@ -215,85 +181,6 @@ public final class SettingsUiHelper {
         }
         if (tvPrivateRoutingSubtitle != null) {
             updatePrivateRoutingSubtitle(context, settingsPrefs, tvPrivateRoutingSubtitle);
-        }
-    }
-
-    private static void showNotificationTypesDialog(
-            @NonNull Context context,
-            @NonNull SettingsPreferences prefs,
-            @Nullable MaterialSwitch switchNotifications,
-            @Nullable TextView tvSummary,
-            @Nullable Runnable requestNotificationPermission) {
-        View dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_notification_types, null);
-
-        View rowStatus = dialogView.findViewById(R.id.row_notif_type_status);
-        MaterialSwitch switchStatus = dialogView.findViewById(R.id.switch_notif_type_status);
-
-        View rowCountdown = dialogView.findViewById(R.id.row_notif_type_countdown);
-        MaterialSwitch switchCountdown = dialogView.findViewById(R.id.switch_notif_type_countdown);
-
-        View rowConnection = dialogView.findViewById(R.id.row_notif_type_connection);
-        MaterialSwitch switchConnection = dialogView.findViewById(R.id.switch_notif_type_connection);
-
-        View rowFirewall = dialogView.findViewById(R.id.row_notif_type_firewall);
-        MaterialSwitch switchFirewall = dialogView.findViewById(R.id.switch_notif_type_firewall);
-
-        switchStatus.setChecked(prefs.isNotificationTypeEnabled(NotificationType.VPN_STATUS));
-        switchCountdown.setChecked(prefs.isNotificationTypeEnabled(NotificationType.VPN_TIMER_COUNTDOWN));
-        switchConnection.setChecked(prefs.isNotificationTypeEnabled(NotificationType.CONNECTION_EVENTS));
-        switchFirewall.setChecked(prefs.isNotificationTypeEnabled(NotificationType.FIREWALL_ALERTS));
-
-        rowStatus.setOnClickListener(v -> switchStatus.toggle());
-        rowCountdown.setOnClickListener(v -> switchCountdown.toggle());
-        rowConnection.setOnClickListener(v -> switchConnection.toggle());
-        rowFirewall.setOnClickListener(v -> switchFirewall.toggle());
-
-        new MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.title_notification_types_dialog)
-                .setView(dialogView)
-                .setNegativeButton(R.string.action_cancel, null)
-                .setPositiveButton(R.string.action_confirm_timer, (dialog, which) -> {
-                    boolean[] states = new boolean[]{
-                            switchStatus.isChecked(),
-                            switchCountdown.isChecked(),
-                            switchConnection.isChecked(),
-                            switchFirewall.isChecked()
-                    };
-                    NotificationType[] types = NotificationType.values();
-                    int enabledCount = 0;
-                    for (int i = 0; i < types.length; i++) {
-                        prefs.setNotificationTypeEnabled(types[i], states[i]);
-                        if (states[i]) {
-                            enabledCount++;
-                        }
-                    }
-                    if (enabledCount > 0 && !prefs.isNotificationsEnabled()) {
-                        prefs.setNotificationsEnabled(true);
-                        if (switchNotifications != null) {
-                            switchNotifications.setChecked(true);
-                        }
-                    } else if (enabledCount == 0 && prefs.isNotificationsEnabled()) {
-                        prefs.setNotificationsEnabled(false);
-                        if (switchNotifications != null) {
-                            switchNotifications.setChecked(false);
-                        }
-                    }
-                    if (tvSummary != null) {
-                        tvSummary.setText(formatNotificationTypesSummary(context, prefs));
-                    }
-                    if (enabledCount > 0 && !ProxyNotificationManager.hasNotificationPermission(context)
-                            && requestNotificationPermission != null) {
-                        requestNotificationPermission.run();
-                    }
-                    refreshVpnNotificationsIfRunning(context);
-                    Toast.makeText(context, R.string.msg_notifications_saved, Toast.LENGTH_SHORT).show();
-                })
-                .show();
-    }
-
-    private static void refreshVpnNotificationsIfRunning(Context context) {
-        if (ProxyRuntimeManager.getInstance().getCurrentStatus().isRunning()) {
-            ProxyVpnService.refreshNotifications(context);
         }
     }
 

@@ -302,7 +302,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Section 3: Notifications (Master Switch & Category Selector) -->
+        <!-- Section 3: Notifications (Dedicated Screen Entry) -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -326,124 +326,56 @@
             app:strokeWidth="1dp">
 
             <LinearLayout
+                android:id="@+id/row_setting_notifications"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="72dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="14dp">
 
-                <!-- Notifications Master Toggle Row -->
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="@string/settings_group_notifications"
+                    android:src="@drawable/ic_notifications"
+                    app:tint="@color/md_theme_primary" />
+
                 <LinearLayout
-                    android:id="@+id/row_notifications_enable"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:minHeight="72dp"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="14dp">
+                    android:layout_marginStart="14dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@string/setting_notifications_master_title"
-                        android:src="@drawable/ic_notifications"
-                        app:tint="@color/md_theme_primary" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="14dp"
-                        android:layout_marginEnd="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/setting_notifications_master_title"
-                            android:textColor="@color/md_theme_onSurface"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="@string/setting_notifications_master_subtitle"
-                            android:textColor="@color/md_theme_onSurfaceVariant"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/switch_notifications_enabled"
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:contentDescription="@string/setting_notifications_master_title"
-                        android:minHeight="48dp" />
-                </LinearLayout>
+                        android:text="@string/title_notifications_settings"
+                        android:textColor="@color/md_theme_onSurface"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginStart="54dp"
-                    android:alpha="0.35"
-                    android:background="@color/md_theme_outline" />
-
-                <!-- Notification Categories Multi-Choice Selector Row -->
-                <LinearLayout
-                    android:id="@+id/row_notification_types"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:minHeight="68dp"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="14dp">
-
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:contentDescription="@string/setting_notification_types_title"
-                        android:src="@drawable/ic_tune"
-                        app:tint="@color/md_theme_secondary" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/tv_notifications_summary"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="14dp"
-                        android:layout_marginEnd="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/setting_notification_types_title"
-                            android:textColor="@color/md_theme_onSurface"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tv_notification_types_value"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:textColor="@color/md_theme_onSurfaceVariant"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="@color/md_theme_onSurfaceVariant" />
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/md_theme_onSurfaceVariant"
+                        android:textSize="13sp" />
                 </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/md_theme_onSurfaceVariant" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

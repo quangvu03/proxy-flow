@@ -352,6 +352,15 @@
     <string name="notif_type_firewall_alerts_desc">Thông báo khi tường lửa chặn ứng dụng truy cập mạng</string>
     <string name="notif_type_firewall_alerts_short">Tường lửa</string>
     <string name="msg_notifications_saved">Đã cập nhật cài đặt thông báo</string>
+    <string name="title_notifications_settings">Cài đặt Thông báo</string>
+    <string name="section_notification_categories">Các loại thông báo</string>
+    <string name="msg_notif_permission_required">Ứng dụng cần quyền Thông báo để hiển thị trạng thái VPN, đếm ngược và cảnh báo.</string>
+    <string name="action_grant_permission">Cấp quyền</string>
+    <string name="msg_notif_permission_denied">Chưa cấp quyền hiển thị thông báo</string>
+    <string name="action_test_notification">Gửi thông báo thử</string>
+    <string name="msg_test_notification_sent">Đã gửi thông báo thử nghiệm</string>
+    <string name="notif_test_title">Thông báo thử từ ProxyFlow</string>
+    <string name="notif_test_body">Hệ thống thông báo và đếm ngược VPN đang hoạt động bình thường.</string>
 
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

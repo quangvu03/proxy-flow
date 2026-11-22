@@ -15,15 +15,18 @@ import com.example.data.SettingsPreferences;
 import com.example.data.SettingsPreferences.NotificationType;
 import com.example.model.ProxyConfig;
 import com.example.network.ProxyNotificationManager;
+import com.example.ui.NotificationsSettingsActivity;
 import com.example.ui.SettingsUiHelper;
+import com.google.android.material.materialswitch.MaterialSwitch;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 
 /**
  * Unit tests verifying notification preferences persistence, category summary formatting,
- * and live VPN Timer countdown foreground notification construction.
+ * live VPN Timer countdown foreground notification construction, and NotificationsSettingsActivity.
  */
 @RunWith(RobolectricTestRunner.class)
 public class NotificationsTest {
@@ -87,6 +90,56 @@ public class NotificationsTest {
                 context, proxy, 10808, deadlineMs, 15, null, null);
         assertFalse(withoutCountdown.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false));
         assertEquals(0, withoutCountdown.extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0));
+    }
+
+    @Test
+    public void notificationsSettingsActivity_rendersSwitchesAndPersistsToggles() {
+        Context context = ApplicationProvider.getApplicationContext();
+        SettingsPreferences prefs = new SettingsPreferences(context);
+        prefs.setNotificationsEnabled(true);
+        for (NotificationType type : NotificationType.values()) {
+            prefs.setNotificationTypeEnabled(type, true);
+        }
+
+        NotificationsSettingsActivity activity = Robolectric.buildActivity(NotificationsSettingsActivity.class)
+                .setup()
+                .get();
+
+        MaterialSwitch switchMaster = activity.findViewById(R.id.switch_notifications_master);
+        MaterialSwitch switchStatus = activity.findViewById(R.id.switch_notif_type_status);
+        MaterialSwitch switchCountdown = activity.findViewById(R.id.switch_notif_type_countdown);
+        MaterialSwitch switchConnection = activity.findViewById(R.id.switch_notif_type_connection);
+        MaterialSwitch switchFirewall = activity.findViewById(R.id.switch_notif_type_firewall);
+
+        assertNotNull(switchMaster);
+        assertNotNull(switchStatus);
+        assertNotNull(switchCountdown);
+        assertNotNull(switchConnection);
+        assertNotNull(switchFirewall);
+
+        assertTrue(switchMaster.isChecked());
+        assertTrue(switchStatus.isChecked());
+        assertTrue(switchCountdown.isChecked());
+        assertTrue(switchConnection.isChecked());
+        assertTrue(switchFirewall.isChecked());
+
+        // Toggle off all 4 categories via row taps -> master switch automatically turns off
+        activity.findViewById(R.id.row_notif_type_countdown).performClick();
+        assertFalse(prefs.isNotificationTypeEnabled(NotificationType.VPN_TIMER_COUNTDOWN));
+        assertTrue(switchMaster.isChecked());
+
+        activity.findViewById(R.id.row_notif_type_status).performClick();
+        activity.findViewById(R.id.row_notif_type_connection).performClick();
+        activity.findViewById(R.id.row_notif_type_firewall).performClick();
+
+        assertFalse(prefs.isNotificationsEnabled());
+        assertFalse(switchMaster.isChecked());
+
+        // Re-enabling a category turns master switch back on
+        activity.findViewById(R.id.row_notif_type_countdown).performClick();
+        assertTrue(prefs.isNotificationTypeEnabled(NotificationType.VPN_TIMER_COUNTDOWN));
+        assertTrue(prefs.isNotificationsEnabled());
+        assertTrue(switchMaster.isChecked());
     }
 
     @Test

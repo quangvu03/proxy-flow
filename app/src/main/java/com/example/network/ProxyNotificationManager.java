@@ -241,6 +241,17 @@ public final class ProxyNotificationManager {
         postEventNotification(context, NOTIF_ID_FIREWALL_EVENT, R.drawable.ic_shield, title, body);
     }
 
+    public static boolean sendTestNotification(@NonNull Context context) {
+        if (!hasNotificationPermission(context)) {
+            return false;
+        }
+        ensureChannels(context);
+        String title = context.getString(R.string.notif_test_title);
+        String body = context.getString(R.string.notif_test_body);
+        postEventNotification(context, NOTIF_ID_CONNECTION_EVENT, R.drawable.ic_notifications, title, body);
+        return true;
+    }
+
     private static void postEventNotification(
             @NonNull Context context,
             int notificationId,
