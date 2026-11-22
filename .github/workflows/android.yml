@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on: [push]
@@ -30,6 +31,17 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug, O=Android, C=US"
 
+      # PHẢI ĐẶT TRƯỚC KHI BUILD
+      - name: Prepare Firebase config
+        run: |
+          mkdir -p app
+          cp public/assets/aistudio/google-services_17f64a08.json app/google-services.json
+
+      - name: Verify Firebase config
+        run: |
+          test -s app/google-services.json
+          echo "Firebase config exists!"
+
       - name: Build Debug APK
         run: gradle assembleDebug
 
@@ -38,14 +50,8 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk \
              app/build/outputs/apk/debug/Proxy-Flow.apk
 
-      
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Proxy-Flow
           path: app/build/outputs/apk/debug/Proxy-Flow.apk
-      - name: Create Firebase config
-        env:
-          FIREBASE_CONFIG: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          echo "$FIREBASE_CONFIG" > app/google-services.json
