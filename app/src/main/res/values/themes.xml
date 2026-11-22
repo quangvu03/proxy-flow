@@ -21,6 +21,10 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
+    <style name="Theme.ProxyFlow.Splash" parent="Theme.ProxyFlow">
+        <item name="android:windowBackground">@color/md_theme_background</item>
+    </style>
+
     <style name="ShapeAppearance.ProxyFlow.Card" parent="ShapeAppearance.Material3.Corner.Large">
         <item name="cornerSize">20dp</item>
     </style>

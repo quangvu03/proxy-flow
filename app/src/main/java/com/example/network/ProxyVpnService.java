@@ -1,9 +1,6 @@
 package com.example.network;
 
 import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -19,9 +16,6 @@ import android.os.ParcelFileDescriptor;
 import android.system.OsConstants;
 
 import androidx.annotation.NonNull;
-import androidx.core.app.NotificationCompat;
-
-import com.example.MainActivity;
 import com.example.R;
 import com.example.data.InstalledAppScanner;
 import com.example.data.ProxyRepository;
@@ -66,10 +60,9 @@ public class ProxyVpnService extends VpnService
     public static final String ACTION_REAPPLY_APP_RULES = "com.example.action.REAPPLY_APP_RULES";
     public static final String ACTION_REAPPLY_POLICIES = "com.example.action.REAPPLY_POLICIES";
     public static final String ACTION_UPDATE_VPN_TIMER = "com.example.action.UPDATE_VPN_TIMER";
+    public static final String ACTION_UPDATE_NOTIFICATIONS = "com.example.action.UPDATE_NOTIFICATIONS";
     public static final String EXTRA_PROXY_ID = "extra_proxy_id";
 
-    private static final String CHANNEL_ID = "proxyflow_vpn_channel";
-    private static final int NOTIFICATION_ID = 2048;
     private static final long FAILURE_LOG_THROTTLE_MS = 15_000L;
     private static final long NETWORK_LOST_GRACE_MS = 2_500L;
     private static final int AUTO_STOP_CONSECUTIVE_FAILURES = 2;
@@ -154,6 +147,12 @@ public class ProxyVpnService extends VpnService
         context.startService(intent);
     }
 
+    public static void refreshNotifications(Context context) {
+        Intent intent = new Intent(context, ProxyVpnService.class);
+        intent.setAction(ACTION_UPDATE_NOTIFICATIONS);
+        context.startService(intent);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -165,7 +164,7 @@ public class ProxyVpnService extends VpnService
         localProxyServer.setEventListener(this);
         localProxyServer.setPolicyChecker(this);
         refreshPolicySnapshots();
-        createNotificationChannel();
+        ProxyNotificationManager.ensureChannels(this);
     }
 
     @Override
@@ -202,8 +201,24 @@ public class ProxyVpnService extends VpnService
             return START_STICKY;
         }
 
+        if (ACTION_UPDATE_NOTIFICATIONS.equals(action)) {
+            if (isRunning.get()) {
+                updateNotification();
+            }
+            return START_STICKY;
+        }
+
         long requestedId = intent != null ? intent.getLongExtra(EXTRA_PROXY_ID, -1L) : -1L;
-        startForegroundCompat(buildNotification(getString(R.string.status_connecting), ""));
+        Notification initialNotification = ProxyNotificationManager.buildVpnForegroundNotification(
+                this,
+                activeProxy,
+                0,
+                0L,
+                SettingsPreferences.VPN_TIMER_ALWAYS,
+                getString(R.string.status_connecting),
+                ""
+        );
+        startForegroundCompat(initialNotification);
         startTunnelAsync(requestedId);
         return START_STICKY;
     }
@@ -247,6 +262,7 @@ public class ProxyVpnService extends VpnService
                 connectedSinceMs = System.currentTimeMillis();
                 applyConfiguredVpnTimer(connectedSinceMs, false);
                 isRunning.set(true);
+                updateNotification();
                 registerNetworkMonitor();
                 startTelemetryTicker();
 
@@ -256,6 +272,7 @@ public class ProxyVpnService extends VpnService
                     repository.addLog(ProxyLogEntry.Level.INFO,
                             getString(R.string.log_vpn_timer_set, formatTimerMinutes(activeVpnTimerMinutes)));
                 }
+                ProxyNotificationManager.notifyVpnConnected(this, chosen, activeVpnTimerMinutes);
 
                 // Refresh exit IP and latency once on initial connect without changing proxy
                 ProxyTester.TestResult test = ProxyTester.testProxy(chosen, 6000);
@@ -351,8 +368,9 @@ public class ProxyVpnService extends VpnService
                 long deadline = vpnTimerDeadlineMs;
                 if (deadline > 0L && System.currentTimeMillis() >= deadline) {
                     int minutes = activeVpnTimerMinutes;
-                    autoStopOnDisconnect(getString(R.string.log_vpn_timer_expired,
-                            formatTimerMinutes(minutes)));
+                    String durationLabel = formatTimerMinutes(minutes);
+                    ProxyNotificationManager.notifyTimerExpired(this, durationLabel);
+                    stopTunnelAndService("", getString(R.string.log_vpn_timer_expired, durationLabel), false);
                     return;
                 }
                 publishStatus(ConnectionStatus.State.CONNECTED, "");
@@ -507,10 +525,10 @@ public class ProxyVpnService extends VpnService
     }
 
     private void stopTunnelAndService(String errorMsg) {
-        stopTunnelAndService(errorMsg, null);
+        stopTunnelAndService(errorMsg, null, true);
     }
 
-    private void stopTunnelAndService(String errorMsg, String customDisconnectLog) {
+    private void stopTunnelAndService(String errorMsg, String customDisconnectLog, boolean notifyDisconnectEvent) {
         if (!stopping.compareAndSet(false, true)) {
             return;
         }
@@ -538,8 +556,14 @@ public class ProxyVpnService extends VpnService
         runtimeManager.postDisconnected(current, errorMsg);
         if (customDisconnectLog != null && !customDisconnectLog.isEmpty()) {
             repository.addLog(ProxyLogEntry.Level.WARN, customDisconnectLog);
+            if (notifyDisconnectEvent) {
+                ProxyNotificationManager.notifyVpnDisconnected(this, customDisconnectLog, true);
+            }
         } else if (errorMsg == null || errorMsg.isEmpty()) {
             repository.addLog(ProxyLogEntry.Level.INFO, "Đã ngắt kết nối VPN Proxy");
+            if (notifyDisconnectEvent) {
+                ProxyNotificationManager.notifyVpnDisconnected(this, null, false);
+            }
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
@@ -549,7 +573,7 @@ public class ProxyVpnService extends VpnService
         if (!isRunning.get()) {
             return;
         }
-        stopTunnelAndService("", logMessage);
+        stopTunnelAndService("", logMessage, true);
     }
 
     private boolean isAutoStopEnabled() {
@@ -769,6 +793,7 @@ public class ProxyVpnService extends VpnService
             repository.addLog(ProxyLogEntry.Level.WARN,
                     getString(R.string.log_firewall_blocked_request, appOrRule, destination));
         }
+        ProxyNotificationManager.notifyFirewallBlocked(this, appOrRule, destination);
     }
 
     @Override
@@ -826,9 +851,10 @@ public class ProxyVpnService extends VpnService
 
     private void startForegroundCompat(Notification notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            startForeground(ProxyNotificationManager.NOTIF_ID_VPN_FOREGROUND, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
-            startForeground(NOTIFICATION_ID, notification);
+            startForeground(ProxyNotificationManager.NOTIF_ID_VPN_FOREGROUND, notification);
         }
     }
 
@@ -866,69 +892,14 @@ public class ProxyVpnService extends VpnService
         return getString(R.string.vpn_timer_minutes, minutes);
     }
 
-    private static String formatRemainingCountdown(long remainingSeconds) {
-        long safe = Math.max(0L, remainingSeconds);
-        long hours = safe / 3600L;
-        long mins = (safe % 3600L) / 60L;
-        long secs = safe % 60L;
-        if (hours > 0) {
-            return String.format(java.util.Locale.US, "%02d:%02d:%02d", hours, mins, secs);
-        }
-        return String.format(java.util.Locale.US, "%02d:%02d", mins, secs);
-    }
-
     private void updateNotification() {
         if (!isRunning.get() || activeProxy == null) return;
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            String title = getString(R.string.notif_title_connected, activeProxy.getAddressDisplay());
-            String body;
-            long deadline = vpnTimerDeadlineMs;
-            if (deadline > 0L) {
-                long remainingSec = Math.max(0L, (deadline - System.currentTimeMillis() + 999L) / 1000L);
-                body = getString(R.string.notif_text_timer_remaining,
-                        localProxyServer.getLocalPort(), formatRemainingCountdown(remainingSec));
-            } else {
-                body = getString(R.string.notif_text_connected,
-                        localProxyServer.getLocalPort(), getString(R.string.label_manual_fixed_ip));
-            }
-            nm.notify(NOTIFICATION_ID, buildNotification(title, body));
-        }
-    }
-
-    private Notification buildNotification(String title, String content) {
-        Intent openIntent = new Intent(this, MainActivity.class);
-        PendingIntent openPending = PendingIntent.getActivity(
-                this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        Intent stopIntent = new Intent(this, ProxyVpnService.class);
-        stopIntent.setAction(ACTION_STOP);
-        PendingIntent stopPending = PendingIntent.getService(
-                this, 2, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_nav_connect)
-                .setContentTitle(title)
-                .setContentText(content)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setContentIntent(openPending)
-                .addAction(R.drawable.ic_power, getString(R.string.notif_action_stop), stopPending)
-                .build();
-    }
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.notif_channel_name),
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription(getString(R.string.notif_channel_desc));
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.createNotificationChannel(channel);
-            }
-        }
+        ProxyNotificationManager.updateVpnForegroundNotification(
+                this,
+                activeProxy,
+                localProxyServer.getLocalPort(),
+                vpnTimerDeadlineMs,
+                activeVpnTimerMinutes
+        );
     }
 }

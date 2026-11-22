@@ -44,4 +44,6 @@
             app:menu="@menu/menu_bottom_nav" />
     </LinearLayout>
 
+    <include layout="@layout/view_splash_overlay" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

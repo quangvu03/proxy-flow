@@ -59,7 +59,7 @@ public class LogListAdapter extends ListAdapter<ProxyLogEntry, LogListAdapter.Lo
         holder.bind(getItem(position));
     }
 
-    static class LogViewHolder extends RecyclerView.ViewHolder {
+    public static class LogViewHolder extends RecyclerView.ViewHolder {
         private final TextView tvTime;
         private final TextView tvLevel;
         private final TextView tvMessage;

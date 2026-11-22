@@ -72,8 +72,30 @@ public class SettingsPreferences {
     public static final String SQLITE_KEY_FIREWALL_ENABLED = "firewall_enabled";
     public static final String SQLITE_KEY_PRIVATE_ROUTING_ENABLED = "private_network_routing_enabled";
     public static final String SQLITE_KEY_PRIVATE_ROUTING_RANGES = "private_network_ranges";
+    public static final String SQLITE_KEY_NOTIF_MASTER_ENABLED = "notif_master_enabled";
+    public static final String SQLITE_KEY_NOTIF_VPN_STATUS = "notif_type_vpn_status";
+    public static final String SQLITE_KEY_NOTIF_VPN_TIMER_COUNTDOWN = "notif_type_vpn_timer_countdown";
+    public static final String SQLITE_KEY_NOTIF_CONNECTION_EVENTS = "notif_type_connection_events";
+    public static final String SQLITE_KEY_NOTIF_FIREWALL_ALERTS = "notif_type_firewall_alerts";
     public static final int VPN_TIMER_ALWAYS = 0;
     public static final int VPN_TIMER_MAX_MINUTES = 1440;
+
+    public enum NotificationType {
+        VPN_STATUS(SQLITE_KEY_NOTIF_VPN_STATUS),
+        VPN_TIMER_COUNTDOWN(SQLITE_KEY_NOTIF_VPN_TIMER_COUNTDOWN),
+        CONNECTION_EVENTS(SQLITE_KEY_NOTIF_CONNECTION_EVENTS),
+        FIREWALL_ALERTS(SQLITE_KEY_NOTIF_FIREWALL_ALERTS);
+
+        private final String sqliteKey;
+
+        NotificationType(String sqliteKey) {
+            this.sqliteKey = sqliteKey;
+        }
+
+        public String getSqliteKey() {
+            return sqliteKey;
+        }
+    }
 
     private final SharedPreferences prefs;
     private final ProxyDatabaseHelper dbHelper;
@@ -218,6 +240,40 @@ public class SettingsPreferences {
     public void setPrivateNetworkRangesText(String rangesText) {
         String value = rangesText != null ? rangesText.trim() : "";
         dbHelper.putSetting(SQLITE_KEY_PRIVATE_ROUTING_RANGES, value);
+    }
+
+    public boolean isNotificationsEnabled() {
+        String raw = dbHelper.getSetting(SQLITE_KEY_NOTIF_MASTER_ENABLED, "true");
+        return Boolean.parseBoolean(raw);
+    }
+
+    public void setNotificationsEnabled(boolean enabled) {
+        dbHelper.putSetting(SQLITE_KEY_NOTIF_MASTER_ENABLED, String.valueOf(enabled));
+    }
+
+    public boolean isNotificationTypeEnabled(NotificationType type) {
+        if (type == null) return false;
+        String raw = dbHelper.getSetting(type.getSqliteKey(), "true");
+        return Boolean.parseBoolean(raw);
+    }
+
+    public void setNotificationTypeEnabled(NotificationType type, boolean enabled) {
+        if (type == null) return;
+        dbHelper.putSetting(type.getSqliteKey(), String.valueOf(enabled));
+    }
+
+    public boolean isNotificationActive(NotificationType type) {
+        return isNotificationsEnabled() && isNotificationTypeEnabled(type);
+    }
+
+    public int getEnabledNotificationTypesCount() {
+        int count = 0;
+        for (NotificationType type : NotificationType.values()) {
+            if (isNotificationTypeEnabled(type)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public static void applySavedThemeAndLocale(Context context) {

@@ -8,6 +8,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -15,10 +16,10 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.R;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.divider.MaterialDividerItemDecoration;
 
 /**
- * Fragment in 100% Java displaying the manual fixed-IP mode summary
- * and live connection event logs.
+ * Fragment in 100% Java displaying live connection and firewall event logs.
  */
 public class LogsFragment extends Fragment {
 
@@ -47,6 +48,11 @@ public class LogsFragment extends Fragment {
 
         logAdapter = new LogListAdapter();
         recyclerLogs.setLayoutManager(new LinearLayoutManager(requireContext()));
+        MaterialDividerItemDecoration divider =
+                new MaterialDividerItemDecoration(requireContext(), LinearLayoutManager.VERTICAL);
+        divider.setLastItemDecorated(false);
+        divider.setDividerColor(ContextCompat.getColor(requireContext(), R.color.md_theme_surfaceVariant));
+        recyclerLogs.addItemDecoration(divider);
         recyclerLogs.setAdapter(logAdapter);
 
         btnClearLogs.setOnClickListener(v -> viewModel.clearLogs());

@@ -309,5 +309,49 @@
     <string name="log_private_routing_enabled">Private network routing via Proxy enabled (%1$d IP ranges)</string>
     <string name="log_private_routing_disabled">Private network routing via Proxy disabled</string>
 
+    <string name="splash_tagline">Fixed HTTP Proxy, VPN Routing &amp; Firewall Manager</string>
+    <string name="splash_initializing">Initializing workspace…</string>
+
+    <!-- Notifications & VPN Timer Countdown -->
+    <string name="notif_events_channel_name">Proxy Events &amp; Alerts</string>
+    <string name="notif_events_channel_desc">Alerts for connection state, VPN timer expiration, and firewall blocks</string>
+    <string name="notif_minimal_running">Proxy VPN service running in background</string>
+    <string name="notif_title_timer_countdown">ProxyFlow • %1$s left</string>
+    <string name="notif_title_timer_only">VPN Timer • %1$s left</string>
+    <string name="notif_subtext_countdown">Countdown %1$s</string>
+    <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Auto-stop in %3$s</string>
+    <string name="notif_event_connected_title">ProxyFlow VPN Connected</string>
+    <string name="notif_event_connected_body">Routing traffic via %1$s</string>
+    <string name="notif_event_connected_timer_body">Routing via %1$s • Timer %2$d min</string>
+    <string name="notif_event_disconnected_title">ProxyFlow VPN Disconnected</string>
+    <string name="notif_event_disconnected_body">Proxy VPN routing session stopped</string>
+    <string name="notif_event_autostop_title">ProxyFlow Auto-Stopped</string>
+    <string name="notif_event_timer_expired_title">VPN Timer Expired</string>
+    <string name="notif_event_timer_expired_body">Proxy VPN service stopped automatically after %1$s</string>
+    <string name="notif_event_firewall_title">Firewall Alert</string>
+
+    <string name="settings_group_notifications">Notifications</string>
+    <string name="setting_notifications_master_title">App notifications</string>
+    <string name="setting_notifications_master_subtitle">Show VPN status, countdown &amp; event alerts</string>
+    <string name="setting_notification_types_title">Notification categories</string>
+    <string name="setting_notification_types_off">All notifications turned off</string>
+    <string name="setting_notification_types_none">No notification categories enabled</string>
+    <string name="setting_notification_types_summary">Enabled %1$d/%2$d: %3$s</string>
+    <string name="title_notification_types_dialog">Toggle Notification Categories</string>
+    <string name="desc_notification_types_dialog">Turn each type of ProxyFlow notification on or off individually.</string>
+    <string name="notif_type_vpn_status">VPN status in notification bar</string>
+    <string name="notif_type_vpn_status_desc">Show active Proxy address, local port, and quick disconnect button</string>
+    <string name="notif_type_vpn_status_short">VPN status</string>
+    <string name="notif_type_vpn_countdown">VPN Timer live countdown</string>
+    <string name="notif_type_vpn_countdown_desc">Show live remaining countdown seconds and expiration alert</string>
+    <string name="notif_type_vpn_countdown_short">VPN countdown</string>
+    <string name="notif_type_connection_events">Connection &amp; disconnection alerts</string>
+    <string name="notif_type_connection_events_desc">Notify on connect, disconnect, or auto-stop due to lost network</string>
+    <string name="notif_type_connection_events_short">Connection</string>
+    <string name="notif_type_firewall_alerts">Firewall block alerts</string>
+    <string name="notif_type_firewall_alerts_desc">Alert when the firewall blocks an app from internet access</string>
+    <string name="notif_type_firewall_alerts_short">Firewall</string>
+    <string name="msg_notifications_saved">Notification preferences updated</string>
+
     <string name="label_app_version">Version: %1$s • Flutter 3.6.1</string>
 </resources>

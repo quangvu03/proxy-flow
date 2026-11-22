@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/splash_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/md_theme_background"
+    android:clickable="true"
+    android:elevation="24dp"
+    android:focusable="true">
+
+    <!-- Subtle radial accent glow behind the centered brand block -->
+    <View
+        android:layout_width="280dp"
+        android:layout_height="280dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="36dp"
+        android:background="@drawable/bg_splash_glow" />
+
+    <!-- Centered Brand Logo, Name & Short Intro -->
+    <LinearLayout
+        android:id="@+id/splash_brand_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="32dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="92dp"
+            android:layout_height="92dp"
+            app:cardBackgroundColor="#0F172A"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/md_theme_outline"
+            app:strokeWidth="1dp">
+
+            <ImageView
+                android:id="@+id/iv_splash_logo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/app_name"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/proxyflow_icon_art" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:id="@+id/tv_splash_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:letterSpacing="0.02"
+            android:text="@string/app_name"
+            android:textColor="@color/md_theme_onBackground"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_splash_tagline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.25"
+            android:maxWidth="340dp"
+            android:text="@string/splash_tagline"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            android:textSize="14sp" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress_splash"
+            android:layout_width="136dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:indeterminate="true"
+            app:indicatorColor="@color/md_theme_primary"
+            app:trackColor="@color/md_theme_surfaceVariant"
+            app:trackCornerRadius="4dp"
+            app:trackThickness="4dp" />
+    </LinearLayout>
+
+    <!-- Bottom initialization caption -->
+    <TextView
+        android:id="@+id/tv_splash_initializing"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="28dp"
+        android:alpha="0.82"
+        android:text="@string/splash_initializing"
+        android:textColor="@color/md_theme_onSurfaceVariant"
+        android:textSize="12sp" />
+</FrameLayout>

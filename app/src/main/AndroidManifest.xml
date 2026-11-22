@@ -34,7 +34,8 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.ProxyFlow"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ProxyFlow.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

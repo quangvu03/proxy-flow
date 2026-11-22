@@ -309,5 +309,49 @@
     <string name="log_private_routing_enabled">Đã bật định tuyến mạng riêng qua Proxy (%1$d phạm vi IP)</string>
     <string name="log_private_routing_disabled">Đã tắt định tuyến mạng riêng qua Proxy</string>
 
+    <string name="splash_tagline">Quản lý Proxy cố định, định tuyến VPN và tường lửa an toàn</string>
+    <string name="splash_initializing">Đang khởi tạo dịch vụ…</string>
+
+    <!-- Notifications & VPN Timer Countdown -->
+    <string name="notif_events_channel_name">Sự kiện &amp; Cảnh báo Proxy</string>
+    <string name="notif_events_channel_desc">Thông báo kết nối, ngắt kết nối, hết hẹn giờ VPN và tường lửa</string>
+    <string name="notif_minimal_running">Dịch vụ VPN Proxy đang hoạt động nền</string>
+    <string name="notif_title_timer_countdown">ProxyFlow • Còn %1$s</string>
+    <string name="notif_title_timer_only">Hẹn giờ VPN • Còn %1$s</string>
+    <string name="notif_subtext_countdown">Đếm ngược %1$s</string>
+    <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Tự ngắt sau %3$s</string>
+    <string name="notif_event_connected_title">Đã kết nối ProxyFlow VPN</string>
+    <string name="notif_event_connected_body">Đang định tuyến lưu lượng qua %1$s</string>
+    <string name="notif_event_connected_timer_body">Đang định tuyến qua %1$s • Hẹn giờ %2$d phút</string>
+    <string name="notif_event_disconnected_title">Đã ngắt kết nối ProxyFlow VPN</string>
+    <string name="notif_event_disconnected_body">Phiên định tuyến Proxy VPN đã dừng</string>
+    <string name="notif_event_autostop_title">ProxyFlow đã tự động dừng</string>
+    <string name="notif_event_timer_expired_title">Hết thời gian hẹn giờ VPN</string>
+    <string name="notif_event_timer_expired_body">Dịch vụ Proxy VPN đã tự ngắt sau %1$s</string>
+    <string name="notif_event_firewall_title">Cảnh báo Tường lửa</string>
+
+    <string name="settings_group_notifications">Thông báo</string>
+    <string name="setting_notifications_master_title">Thông báo ứng dụng</string>
+    <string name="setting_notifications_master_subtitle">Bật thông báo trạng thái, đếm ngược &amp; sự kiện</string>
+    <string name="setting_notification_types_title">Chọn loại thông báo</string>
+    <string name="setting_notification_types_off">Đã tắt toàn bộ thông báo</string>
+    <string name="setting_notification_types_none">Chưa bật loại thông báo nào</string>
+    <string name="setting_notification_types_summary">Đang bật %1$d/%2$d loại: %3$s</string>
+    <string name="title_notification_types_dialog">Bật / tắt các loại thông báo</string>
+    <string name="desc_notification_types_dialog">Bật hoặc tắt từng loại thông báo bạn muốn nhận từ ProxyFlow.</string>
+    <string name="notif_type_vpn_status">Trạng thái VPN trên thanh thông báo</string>
+    <string name="notif_type_vpn_status_desc">Hiển thị địa chỉ Proxy, cổng cục bộ và nút ngắt nhanh</string>
+    <string name="notif_type_vpn_status_short">Trạng thái VPN</string>
+    <string name="notif_type_vpn_countdown">Đếm ngược thời gian VPN (VPN Timer)</string>
+    <string name="notif_type_vpn_countdown_desc">Hiển thị thời gian còn lại theo từng giây và báo khi hết giờ</string>
+    <string name="notif_type_vpn_countdown_short">Đếm ngược VPN</string>
+    <string name="notif_type_connection_events">Thông báo kết nối &amp; ngắt kết nối</string>
+    <string name="notif_type_connection_events_desc">Cảnh báo khi kết nối thành công, ngắt hoặc tự dừng</string>
+    <string name="notif_type_connection_events_short">Kết nối/Ngắt</string>
+    <string name="notif_type_firewall_alerts">Cảnh báo chặn từ Tường lửa</string>
+    <string name="notif_type_firewall_alerts_desc">Thông báo khi tường lửa chặn ứng dụng truy cập mạng</string>
+    <string name="notif_type_firewall_alerts_short">Tường lửa</string>
+    <string name="msg_notifications_saved">Đã cập nhật cài đặt thông báo</string>
+
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

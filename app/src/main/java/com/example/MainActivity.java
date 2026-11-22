@@ -6,7 +6,10 @@ import android.content.pm.PackageManager;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -42,6 +45,13 @@ import com.google.android.material.navigationrail.NavigationRailView;
  * phân quyền, router và tường lửa..
  */
 public class MainActivity extends AppCompatActivity implements ConnectFragment.HostActions {
+
+    private static final long SPLASH_DISPLAY_MS = 900L;
+    private static boolean hasShownStartupSplash = false;
+
+    private final Handler splashHandler = new Handler(Looper.getMainLooper());
+    private View splashOverlay;
+    private Runnable hideSplashRunnable;
 
     private ProxyViewModel viewModel;
     private BottomNavigationView bottomNav;
@@ -84,6 +94,11 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         bottomNav = findViewById(R.id.bottom_navigation);
         navRail = findViewById(R.id.navigation_rail);
 
+        splashOverlay = findViewById(R.id.splash_overlay);
+        View splashBrandContainer = findViewById(R.id.splash_brand_container);
+        View splashInitCaption = findViewById(R.id.tv_splash_initializing);
+        int baseSplashBottomMargin = Math.round(28 * getResources().getDisplayMetrics().density);
+
         View rootCoordinator = findViewById(R.id.root_coordinator);
         ViewCompat.setOnApplyWindowInsetsListener(rootCoordinator, (v, insets) -> {
             Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -99,8 +114,19 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             if (navRail != null) {
                 navRail.setPadding(sysBars.left, sysBars.top, 0, sysBars.bottom);
             }
+            if (splashOverlay != null) {
+                splashOverlay.setPadding(sysBars.left, sysBars.top, sysBars.right, 0);
+            }
+            if (splashInitCaption != null) {
+                android.view.ViewGroup.MarginLayoutParams lp =
+                        (android.view.ViewGroup.MarginLayoutParams) splashInitCaption.getLayoutParams();
+                lp.bottomMargin = baseSplashBottomMargin + sysBars.bottom;
+                splashInitCaption.setLayoutParams(lp);
+            }
             return WindowInsetsCompat.CONSUMED;
         });
+
+        setupStartupSplash(savedInstanceState, splashBrandContainer);
 
         if (savedInstanceState == null) {
             switchTab(R.id.nav_connect);
@@ -148,6 +174,55 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     protected void onSaveInstanceState(@androidx.annotation.NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt("current_tab", currentTabId);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (hideSplashRunnable != null) {
+            splashHandler.removeCallbacks(hideSplashRunnable);
+        }
+        splashHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
+    private void setupStartupSplash(@Nullable Bundle savedInstanceState, @Nullable View brandContainer) {
+        if (splashOverlay == null) {
+            return;
+        }
+        if (savedInstanceState != null || hasShownStartupSplash) {
+            splashOverlay.setVisibility(View.GONE);
+            return;
+        }
+        hasShownStartupSplash = true;
+        splashOverlay.setVisibility(View.VISIBLE);
+        splashOverlay.setAlpha(1f);
+
+        if (brandContainer != null) {
+            brandContainer.setAlpha(0f);
+            brandContainer.setTranslationY(18f);
+            brandContainer.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(280L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+
+        hideSplashRunnable = () -> {
+            if (isFinishing() || isDestroyed() || splashOverlay == null) {
+                return;
+            }
+            splashOverlay.animate()
+                    .alpha(0f)
+                    .setDuration(260L)
+                    .withEndAction(() -> {
+                        if (splashOverlay != null) {
+                            splashOverlay.setVisibility(View.GONE);
+                        }
+                    })
+                    .start();
+        };
+        splashHandler.postDelayed(hideSplashRunnable, SPLASH_DISPLAY_MS);
     }
 
     private void switchTab(int itemId) {
