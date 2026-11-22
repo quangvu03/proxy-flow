@@ -1,29 +1,45 @@
 name: Build Android APK
+
 on: [push]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-      
-      # THÊM BƯỚC NÀY ĐỂ TỰ ĐỘNG TẠO FILE debug.keystore TRƯỚC KHI BUILD
+
       - name: Generate Debug Keystore
         run: |
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US"
+          keytool -genkey -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug, O=Android, C=US"
 
       - name: Build Debug APK
         run: gradle assembleDebug
 
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             app/build/outputs/apk/debug/Proxy-Flow.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-        #tên của file apk
           name: Proxy-Flow
           path: app/build/outputs/apk/debug/Proxy-Flow.apk
