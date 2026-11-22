@@ -362,5 +362,25 @@
     <string name="notif_test_title">Thông báo thử từ ProxyFlow</string>
     <string name="notif_test_body">Hệ thống thông báo và đếm ngược VPN đang hoạt động bình thường.</string>
 
+    <!-- Google-Only Login -->
+    <string name="action_login">Đăng nhập</string>
+    <string name="desc_top_login_button">Đăng nhập bằng tài khoản Google</string>
+    <string name="title_google_login">Đăng nhập Google</string>
+    <string name="title_google_only_login">Đăng nhập bằng Google</string>
+    <string name="desc_google_only_login">ProxyFlow chỉ hỗ trợ đăng nhập bằng tài khoản Google thông qua Google Credential Manager.</string>
+    <string name="badge_google_only_auth">Chỉ tài khoản Google • Không dùng mật khẩu</string>
+    <string name="action_continue_with_google">Tiếp tục với Google</string>
+    <string name="badge_signed_in_google">Đã xác thực bằng tài khoản Google</string>
+    <string name="label_google_uid">UID: %1$s</string>
+    <string name="action_switch_google_account">Đổi tài khoản Google</string>
+    <string name="action_sign_out">Đăng xuất</string>
+    <string name="msg_google_login_success">Đã đăng nhập: %1$s</string>
+    <string name="msg_google_login_cancelled">Đã hủy chọn tài khoản Google</string>
+    <string name="msg_google_login_failed">Đăng nhập Google thất bại: %1$s</string>
+    <string name="msg_google_config_missing">Chưa cấu hình Web Client ID cho Google Sign-In</string>
+    <string name="msg_signed_out">Đã đăng xuất tài khoản Google</string>
+    <string name="log_google_signed_in">Đã đăng nhập Google: %1$s</string>
+    <string name="log_google_signed_out">Đã đăng xuất tài khoản Google</string>
+
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

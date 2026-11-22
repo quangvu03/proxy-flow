@@ -32,6 +32,7 @@ public class SplashAndLogAlignmentTest {
 
     @Test
     public void mainActivity_displaysSplashOverlayIconTitleAndTaglineOnLaunch() {
+        MainActivity.resetStartupSplashForTests();
         try (ActivityController<MainActivity> controller =
                      Robolectric.buildActivity(MainActivity.class).setup()) {
             MainActivity activity = controller.get();

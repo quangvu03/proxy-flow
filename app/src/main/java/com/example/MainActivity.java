@@ -8,8 +8,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -25,6 +27,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.example.auth.GoogleAuthManager;
 import com.example.data.SettingsPreferences;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
@@ -32,6 +35,7 @@ import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyVpnService;
 import com.example.ui.AppProxyFragment;
 import com.example.ui.ConnectFragment;
+import com.example.ui.GoogleLoginActivity;
 import com.example.ui.LogsFragment;
 import com.example.ui.ProxyListFragment;
 import com.example.ui.ProxyViewModel;
@@ -39,6 +43,8 @@ import com.example.ui.SettingsFragment;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.navigationrail.NavigationRailView;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 /**
  * Code viết bằng java, sử dụng Android SDK và các thư viện hỗ trợ của Android để xây dựng một ứng dụng quản lý VPN và proxy.
@@ -49,13 +55,24 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     private static final long SPLASH_DISPLAY_MS = 900L;
     private static boolean hasShownStartupSplash = false;
 
+    @androidx.annotation.VisibleForTesting
+    static void resetStartupSplashForTests() {
+        hasShownStartupSplash = false;
+    }
+
     private final Handler splashHandler = new Handler(Looper.getMainLooper());
     private View splashOverlay;
     private Runnable hideSplashRunnable;
 
     private ProxyViewModel viewModel;
+    private MaterialToolbar topAppBar;
     private BottomNavigationView bottomNav;
     private NavigationRailView navRail;
+
+    @Nullable
+    private FirebaseAuth firebaseAuth;
+    private final FirebaseAuth.AuthStateListener authStateListener =
+            auth -> updateTopLoginPill(auth.getCurrentUser());
 
     private int currentTabId = R.id.nav_connect;
     private long pendingVpnProxyId = -1L;
@@ -83,14 +100,10 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
 
         viewModel = new ViewModelProvider(this).get(ProxyViewModel.class);
 
-        MaterialToolbar toolbar = findViewById(R.id.top_app_bar);
-        toolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.action_settings) {
-                onNavigateToTab(R.id.nav_settings);
-                return true;
-            }
-            return false;
-        });
+        topAppBar = findViewById(R.id.top_app_bar);
+        setupTopLoginAction(topAppBar);
+        firebaseAuth = GoogleAuthManager.getFirebaseAuth(this);
+        updateTopLoginPill(GoogleAuthManager.getCurrentUser(this));
         bottomNav = findViewById(R.id.bottom_navigation);
         navRail = findViewById(R.id.navigation_rail);
 
@@ -102,11 +115,11 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         View rootCoordinator = findViewById(R.id.root_coordinator);
         ViewCompat.setOnApplyWindowInsetsListener(rootCoordinator, (v, insets) -> {
             Insets sysBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            toolbar.setPadding(
-                    toolbar.getPaddingLeft(),
+            topAppBar.setPadding(
+                    topAppBar.getPaddingLeft(),
                     sysBars.top,
-                    toolbar.getPaddingRight(),
-                    toolbar.getPaddingBottom()
+                    topAppBar.getPaddingRight(),
+                    topAppBar.getPaddingBottom()
             );
             if (bottomNav != null) {
                 bottomNav.setPadding(0, 0, 0, sysBars.bottom);
@@ -159,15 +172,92 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                 }
             }
         });
+        if (savedInstanceState == null) {
+            GoogleAuthManager.attemptAutoSignIn(this, new GoogleAuthManager.AuthCallback() {
+                @Override
+                public void onSuccess(@androidx.annotation.NonNull FirebaseUser user) {
+                    updateTopLoginPill(user);
+                }
+
+                @Override
+                public void onCancelled() {
+                }
+
+                @Override
+                public void onError(@androidx.annotation.NonNull String message) {
+                }
+            });
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (firebaseAuth != null) {
+            firebaseAuth.addAuthStateListener(authStateListener);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (firebaseAuth != null) {
+            firebaseAuth.removeAuthStateListener(authStateListener);
+        }
+        super.onStop();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        updateTopLoginPill(GoogleAuthManager.getCurrentUser(this));
         SettingsPreferences settingsPrefs = new SettingsPreferences(this);
         if (settingsPrefs.getThemeMode() == SettingsPreferences.ThemeMode.SYSTEM_TIME) {
             SettingsPreferences.applyThemeMode(SettingsPreferences.ThemeMode.SYSTEM_TIME);
         }
+    }
+
+    private void setupTopLoginAction(MaterialToolbar toolbar) {
+        toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_google_login) {
+                openGoogleLoginScreen();
+                return true;
+            }
+            return false;
+        });
+        MenuItem loginItem = toolbar.getMenu().findItem(R.id.action_google_login);
+        if (loginItem != null && loginItem.getActionView() != null) {
+            View btnTopLogin = loginItem.getActionView().findViewById(R.id.btn_top_login);
+            if (btnTopLogin != null) {
+                btnTopLogin.setOnClickListener(v -> openGoogleLoginScreen());
+            } else {
+                loginItem.getActionView().setOnClickListener(v -> openGoogleLoginScreen());
+            }
+        }
+    }
+
+    private void openGoogleLoginScreen() {
+        startActivity(new Intent(this, GoogleLoginActivity.class));
+    }
+
+    private void updateTopLoginPill(@Nullable FirebaseUser user) {
+        if (topAppBar == null) {
+            return;
+        }
+        MenuItem loginItem = topAppBar.getMenu().findItem(R.id.action_google_login);
+        if (loginItem == null || loginItem.getActionView() == null) {
+            return;
+        }
+        View actionView = loginItem.getActionView();
+        TextView tvLabel = actionView.findViewById(R.id.tv_top_login_label);
+        View statusDot = actionView.findViewById(R.id.view_top_login_status_dot);
+        String label = GoogleAuthManager.getDisplayLabel(user, getString(R.string.action_login));
+        if (tvLabel != null) {
+            tvLabel.setText(label);
+        }
+        if (statusDot != null) {
+            statusDot.setVisibility(user != null ? View.VISIBLE : View.GONE);
+        }
+        loginItem.setTitle(label);
     }
 
     @Override

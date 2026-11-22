@@ -2,9 +2,9 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_settings"
-        android:icon="@drawable/ic_settings"
-        android:title="@string/title_settings"
-        app:iconTint="@color/md_theme_onSurface"
+        android:id="@+id/action_google_login"
+        android:icon="@drawable/ic_account_circle"
+        android:title="@string/action_login"
+        app:actionLayout="@layout/view_top_login_action"
         app:showAsAction="always" />
 </menu>

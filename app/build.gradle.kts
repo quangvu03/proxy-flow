@@ -1,5 +1,6 @@
 plugins {
   alias(libs.plugins.android.application)
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -76,9 +77,14 @@ dependencies {
   implementation(libs.androidx.lifecycle.livedata)
   implementation(libs.osmdroid.android)
 
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.auth)
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services)
+  implementation(libs.googleid)
+
   // Unused template dependencies commented out for fast builds & minimal APK size:
   // implementation(platform(libs.androidx.compose.bom))
-  // implementation(platform(libs.firebase.bom))
   // implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.compose.material3)
   // implementation(libs.androidx.core.ktx)

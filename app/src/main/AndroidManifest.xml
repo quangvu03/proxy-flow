@@ -73,6 +73,12 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.ProxyFlow" />
 
+        <activity
+            android:name=".ui.GoogleLoginActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow" />
+
         <service
             android:name=".network.ProxyVpnService"
             android:exported="false"
