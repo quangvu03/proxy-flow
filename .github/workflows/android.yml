@@ -38,8 +38,14 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk \
              app/build/outputs/apk/debug/Proxy-Flow.apk
 
+      
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Proxy-Flow
           path: app/build/outputs/apk/debug/Proxy-Flow.apk
+      - name: Create Firebase config
+        env:
+          FIREBASE_CONFIG: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          echo "$FIREBASE_CONFIG" > app/google-services.json
