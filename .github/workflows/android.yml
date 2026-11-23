@@ -19,24 +19,41 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Generate Debug Keystore
+      # Lấy keystore cố định từ GitHub Secrets
+      - name: Setup Fixed Debug Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkey -v \
-            -keystore debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug, O=Android, C=US"
+          mkdir -p "$HOME/.android"
 
-      # PHẢI ĐẶT TRƯỚC KHI BUILD
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: Missing DEBUG_KEYSTORE_BASE64"
+            exit 1
+          fi
+
+          echo "$KEYSTORE_BASE64" | base64 --decode \
+            > "$HOME/.android/debug.keystore"
+
+          test -s "$HOME/.android/debug.keystore"
+
+          echo "Fixed keystore installed!"
+
+      # Kiểm tra SHA-1 và SHA-256
+      - name: Show Keystore Fingerprints
+        run: |
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey
+
+      # Chuẩn bị Firebase
       - name: Prepare Firebase config
         run: |
           mkdir -p app
+
           if [ ! -f app/google-services.json ]; then
-            cp public/assets/aistudio/google-services_13d46ad6.json app/google-services.json
+            cp public/assets/aistudio/google-services_13d46ad6.json \
+               app/google-services.json
           fi
 
       - name: Verify Firebase config
@@ -44,14 +61,23 @@ jobs:
           test -s app/google-services.json
           echo "Firebase config exists!"
 
+      # Build APK
       - name: Build Debug APK
         run: gradle assembleDebug
 
+      # Kiểm tra chữ ký APK
+      - name: Verify APK Signature
+        run: |
+          apksigner verify --print-certs \
+            app/build/outputs/apk/debug/app-debug.apk
+
+      # Đổi tên APK
       - name: Rename APK
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk \
              app/build/outputs/apk/debug/Proxy-Flow.apk
 
+      # Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
