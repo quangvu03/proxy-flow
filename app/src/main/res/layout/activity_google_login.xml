@@ -23,6 +23,13 @@
         android:alpha="0.4"
         android:background="@color/md_theme_outline" />
 
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progress_google_login"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:visibility="invisible" />
+
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -176,14 +183,6 @@
                         app:iconTint="@null"
                         app:strokeColor="@color/md_theme_outline"
                         app:strokeWidth="1dp" />
-
-                    <com.google.android.material.progressindicator.CircularProgressIndicator
-                        android:id="@+id/progress_google_login"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:indeterminate="true"
-                        android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -43,7 +43,7 @@ import java.util.concurrent.Executors;
 public final class GoogleAuthManager {
 
     private static final String TAG = "Auth";
-    private static final ExecutorService AUTH_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ExecutorService AUTH_EXECUTOR = Executors.newCachedThreadPool();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     public interface AuthCallback {

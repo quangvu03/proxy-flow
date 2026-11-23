@@ -114,6 +114,9 @@ public class GoogleLoginActivity extends AppCompatActivity {
         GoogleAuthManager.signInWithGoogle(this, new GoogleAuthManager.AuthCallback() {
             @Override
             public void onSuccess(@NonNull FirebaseUser user) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
                 setLoading(false);
                 renderUser(user);
                 String label = !TextUtils.isEmpty(user.getEmail())
@@ -128,6 +131,9 @@ public class GoogleLoginActivity extends AppCompatActivity {
 
             @Override
             public void onCancelled() {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
                 setLoading(false);
                 Toast.makeText(
                         GoogleLoginActivity.this,
@@ -138,6 +144,9 @@ public class GoogleLoginActivity extends AppCompatActivity {
 
             @Override
             public void onError(@NonNull String message) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
                 setLoading(false);
                 showError(getString(R.string.msg_google_login_failed, message));
             }
@@ -151,6 +160,9 @@ public class GoogleLoginActivity extends AppCompatActivity {
         hideError();
         setLoading(true);
         GoogleAuthManager.signOut(this, () -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
             setLoading(false);
             renderUser(null);
             Toast.makeText(GoogleLoginActivity.this, R.string.msg_signed_out, Toast.LENGTH_SHORT).show();
@@ -185,7 +197,7 @@ public class GoogleLoginActivity extends AppCompatActivity {
 
     private void setLoading(boolean loading) {
         isLoading = loading;
-        progressLogin.setVisibility(loading ? View.VISIBLE : View.GONE);
+        progressLogin.setVisibility(loading ? View.VISIBLE : View.INVISIBLE);
         btnGoogleSignIn.setEnabled(!loading);
         btnSwitchAccount.setEnabled(!loading);
         btnSignOut.setEnabled(!loading);

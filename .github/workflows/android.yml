@@ -35,7 +35,9 @@ jobs:
       - name: Prepare Firebase config
         run: |
           mkdir -p app
-          cp public/assets/aistudio/google-services_17f64a08.json app/google-services.json
+          if [ ! -f app/google-services.json ]; then
+            cp public/assets/aistudio/google-services_13d46ad6.json app/google-services.json
+          fi
 
       - name: Verify Firebase config
         run: |
