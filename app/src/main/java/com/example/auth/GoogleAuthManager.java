@@ -22,8 +22,6 @@ import androidx.credentials.exceptions.GetCredentialCancellationException;
 import androidx.credentials.exceptions.GetCredentialException;
 
 import com.example.R;
-import com.example.data.ProxyRepository;
-import com.example.model.ProxyLogEntry;
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
@@ -238,12 +236,6 @@ public final class GoogleAuthManager {
                     .addOnSuccessListener(authResult -> {
                         FirebaseUser user = authResult.getUser();
                         if (user != null) {
-                            String identity = !TextUtils.isEmpty(user.getEmail())
-                                    ? user.getEmail()
-                                    : getDisplayLabel(user, "Google");
-                            ProxyRepository.getInstance(appContext).addLog(
-                                    ProxyLogEntry.Level.SUCCESS,
-                                    appContext.getString(R.string.log_google_signed_in, identity));
                             if (callback != null) {
                                 MAIN_HANDLER.post(() -> callback.onSuccess(user));
                             }
@@ -300,9 +292,6 @@ public final class GoogleAuthManager {
         if (auth != null) {
             auth.signOut();
         }
-        ProxyRepository.getInstance(appContext).addLog(
-                ProxyLogEntry.Level.INFO,
-                appContext.getString(R.string.log_google_signed_out));
         if (onComplete != null) {
             MAIN_HANDLER.post(onComplete);
         }

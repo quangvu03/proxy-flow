@@ -367,8 +367,6 @@
     <string name="desc_top_login_button">Sign in with Google account</string>
     <string name="title_google_login">Google Sign-In</string>
     <string name="title_google_only_login">Sign in with Google</string>
-    <string name="desc_google_only_login">ProxyFlow exclusively supports Google account login via Google Credential Manager.</string>
-    <string name="badge_google_only_auth">Google Account Only • Passwordless</string>
     <string name="action_continue_with_google">Continue with Google</string>
     <string name="badge_signed_in_google">Verified Google Account</string>
     <string name="label_google_uid">UID: %1$s</string>
@@ -379,8 +377,6 @@
     <string name="msg_google_login_failed">Google sign-in failed: %1$s</string>
     <string name="msg_google_config_missing">Google Sign-In Web Client ID is missing</string>
     <string name="msg_signed_out">Signed out of Google account</string>
-    <string name="log_google_signed_in">Signed in with Google: %1$s</string>
-    <string name="log_google_signed_out">Signed out of Google account</string>
 
     <string name="label_app_version">Version: %1$s • Flutter 3.6.1</string>
 </resources>

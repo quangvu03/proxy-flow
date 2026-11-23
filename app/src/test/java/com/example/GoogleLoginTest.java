@@ -10,12 +10,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.test.core.app.ApplicationProvider;
 
 import com.example.auth.GoogleAuthManager;
+import com.example.data.ProxyRepository;
 import com.example.ui.GoogleLoginActivity;
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.button.MaterialButton;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,7 +29,7 @@ import org.robolectric.Shadows;
 
 /**
  * Robolectric tests verifying top-bar Login action (replacing Settings),
- * Google-only login screen rendering, and Google Services web client ID generation.
+ * minimal Google-only login screen rendering, and no auth pollution in proxy logs.
  */
 @RunWith(RobolectricTestRunner.class)
 public class GoogleLoginTest {
@@ -65,21 +69,46 @@ public class GoogleLoginTest {
     }
 
     @Test
-    public void googleLoginActivity_showsGoogleOnlySignInWhenUnauthenticated() {
+    public void googleLoginActivity_showsOnlyIconTitleAndContinueWithGoogleButton() {
         GoogleLoginActivity activity = Robolectric.buildActivity(GoogleLoginActivity.class)
                 .setup()
                 .get();
 
-        View signInCard = activity.findViewById(R.id.card_google_sign_in);
+        ViewGroup signInCard = activity.findViewById(R.id.card_google_sign_in);
         View accountCard = activity.findViewById(R.id.card_google_account);
-        View btnSignIn = activity.findViewById(R.id.btn_google_sign_in);
+        View logo = activity.findViewById(R.id.iv_google_login_logo);
+        TextView title = activity.findViewById(R.id.tv_google_login_title);
+        MaterialButton btnSignIn = activity.findViewById(R.id.btn_google_sign_in);
 
         assertNotNull(signInCard);
         assertNotNull(accountCard);
+        assertNotNull(logo);
+        assertNotNull(title);
         assertNotNull(btnSignIn);
 
         assertEquals(View.VISIBLE, signInCard.getVisibility());
         assertEquals(View.GONE, accountCard.getVisibility());
+
+        ViewGroup cardContent = (ViewGroup) signInCard.getChildAt(0);
+        assertEquals(3, cardContent.getChildCount());
+        assertEquals("Continue with Google", btnSignIn.getText().toString());
         assertEquals("Login", GoogleAuthManager.getDisplayLabel(null, "Login"));
+    }
+
+    @Test
+    public void googleSignOut_doesNotWriteNonProxyLogs() {
+        Context context = ApplicationProvider.getApplicationContext();
+        ProxyRepository repository = ProxyRepository.getInstance(context);
+        repository.clearLogs();
+        int initialCount = repository.getLogs().getValue() != null
+                ? repository.getLogs().getValue().size()
+                : 0;
+
+        GoogleAuthManager.signOut(context, null);
+
+        int afterCount = repository.getLogs().getValue() != null
+                ? repository.getLogs().getValue().size()
+                : 0;
+        assertEquals(initialCount, afterCount);
     }
 }

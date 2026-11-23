@@ -11,17 +11,9 @@
         android:id="@+id/google_login_toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/md_theme_surface"
+        android:background="@android:color/transparent"
         app:navigationContentDescription="@string/action_back"
-        app:navigationIcon="@drawable/ic_back"
-        app:title="@string/title_google_login"
-        app:titleTextColor="@color/md_theme_onSurface" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:alpha="0.4"
-        android:background="@color/md_theme_outline" />
+        app:navigationIcon="@drawable/ic_back" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/progress_google_login"
@@ -35,12 +27,14 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
+        android:fillViewport="true"
         android:paddingHorizontal="@dimen/screen_padding_horizontal"
         android:paddingVertical="@dimen/screen_padding_vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:orientation="vertical">
 
             <!-- Error Banner Card -->
@@ -81,7 +75,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Unauthenticated Card (Google-Only Sign-In) -->
+            <!-- Unauthenticated Card (Minimal: Google Icon + Title + Continue with Google Button) -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_google_sign_in"
                 android:layout_width="match_parent"
@@ -97,80 +91,46 @@
                     android:layout_height="wrap_content"
                     android:gravity="center_horizontal"
                     android:orientation="vertical"
-                    android:padding="24dp">
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="32dp">
 
                     <com.google.android.material.card.MaterialCardView
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
+                        android:layout_width="76dp"
+                        android:layout_height="76dp"
                         app:cardBackgroundColor="@color/md_theme_surfaceContainerHigh"
-                        app:cardCornerRadius="36dp"
+                        app:cardCornerRadius="38dp"
                         app:cardElevation="0dp"
                         app:strokeColor="@color/md_theme_outline"
                         app:strokeWidth="1dp">
 
                         <ImageView
-                            android:layout_width="36dp"
-                            android:layout_height="36dp"
+                            android:id="@+id/iv_google_login_logo"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
                             android:layout_gravity="center"
                             android:contentDescription="@string/title_google_login"
                             android:src="@drawable/ic_google_g" />
                     </com.google.android.material.card.MaterialCardView>
 
                     <TextView
+                        android:id="@+id/tv_google_login_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
+                        android:layout_marginTop="20dp"
                         android:gravity="center"
                         android:text="@string/title_google_only_login"
                         android:textColor="@color/md_theme_onSurface"
                         android:textSize="22sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:lineSpacingExtra="3dp"
-                        android:text="@string/desc_google_only_login"
-                        android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="14sp" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:background="@drawable/bg_pill"
-                        android:backgroundTint="@color/md_theme_primaryContainer"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="6dp">
-
-                        <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_shield"
-                            app:tint="@color/md_theme_onPrimaryContainer" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
-                            android:text="@string/badge_google_only_auth"
-                            android:textColor="@color/md_theme_onPrimaryContainer"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_google_sign_in"
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="54dp"
-                        android:layout_marginTop="24dp"
+                        android:layout_marginTop="28dp"
                         android:text="@string/action_continue_with_google"
+                        android:textAllCaps="false"
                         android:textColor="@color/md_theme_onSurface"
                         android:textSize="15sp"
                         android:textStyle="bold"
