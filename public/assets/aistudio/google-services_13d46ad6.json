@@ -7,17 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:937282827137:android:9af0ed22aec45e48ea2e80",
+        "mobilesdk_app_id": "1:937282827137:android:43fddb2151b779d7ea2e80",
         "android_client_info": {
-          "package_name": "com.company.proxyflow"
+          "package_name": "com.android.proxyflow"
         }
       },
       "oauth_client": [
         {
-          "client_id": "937282827137-fh2nv6c9i1gpalqu74qmq3m9rlqf7e5n.apps.googleusercontent.com",
+          "client_id": "937282827137-jpp027aa31dh7fkj6t18rgqrgt8a928q.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.company.proxyflow",
+            "package_name": "com.android.proxyflow",
             "certificate_hash": "ffdf3b5833555af41168729adb567e0d69d17077"
           }
         },
