@@ -167,13 +167,12 @@ public class ConnectFragment extends Fragment {
                 break;
 
             case CONNECTING:
-                boolean isPreChecking = status.getLocalProxyPort() <= 0;
-                tvStatusBadge.setText(isPreChecking ? R.string.status_checking_proxy : R.string.status_connecting);
+                tvStatusBadge.setText(R.string.status_connecting);
                 tvStatusBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_switching));
                 tvStatusBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_switching_bg)));
-                btnToggleVpn.setEnabled(!isPreChecking);
-                btnToggleVpn.setText(isPreChecking ? R.string.status_checking_proxy : R.string.action_disconnect);
+                btnToggleVpn.setEnabled(true);
+                btnToggleVpn.setText(R.string.action_disconnect);
                 break;
 
             case ERROR:

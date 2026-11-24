@@ -123,6 +123,9 @@ public final class ProxySpeedTester {
                 AuthState auth = proxy.hasAuth() ? AuthState.VALID : AuthState.NOT_REQUIRED;
                 return new DiagnosticResult(true, tcpMs, auth, true, true, "");
             } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+                if (!proxy.hasAuth()) {
+                    return new DiagnosticResult(true, tcpMs, AuthState.NOT_REQUIRED, false, true, "");
+                }
                 return new DiagnosticResult(true, tcpMs, AuthState.FAILED_407, false, false,
                         authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
             } catch (IOException e) {
@@ -157,6 +160,9 @@ public final class ProxySpeedTester {
 
             int code = ProxyTester.parseHttpStatusCode(statusLine);
             if (code == 407) {
+                if (!proxy.hasAuth()) {
+                    return new DiagnosticResult(true, tcpMs, AuthState.NOT_REQUIRED, true, true, "");
+                }
                 return new DiagnosticResult(true, tcpMs, AuthState.FAILED_407, false, false,
                         "Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy");
             }

@@ -181,8 +181,23 @@ public class LocalProxyServer {
                     sendBadGateway(clientOut, "Target host missing for SOCKS5 tunnel");
                     return;
                 }
-                upstream = UpstreamProxyConnector.openTunnel(
-                        proxy, endpoint.host, endpoint.port, UPSTREAM_CONNECT_TIMEOUT_MS);
+                ProxyConfig effectiveSocksProxy = proxy;
+                if (!proxy.hasAuth()) {
+                    ProxyConfig clientCreds = applyClientBasicAuthIfPresent(proxy, lines);
+                    if (clientCreds != null) {
+                        effectiveSocksProxy = clientCreds;
+                    }
+                }
+                try {
+                    upstream = UpstreamProxyConnector.openTunnel(
+                            effectiveSocksProxy, endpoint.host, endpoint.port, UPSTREAM_CONNECT_TIMEOUT_MS);
+                } catch (UpstreamProxyConnector.ProxyAuthException authEx) {
+                    if (!proxy.hasAuth()) {
+                        sendProxyAuthRequired(clientOut);
+                        return;
+                    }
+                    throw authEx;
+                }
                 upstream.setSoTimeout(30000);
                 OutputStream upstreamOut = upstream.getOutputStream();
                 InputStream upstreamIn = upstream.getInputStream();
@@ -211,7 +226,8 @@ public class LocalProxyServer {
                     String line = lines[i];
                     if (line.isEmpty()) continue;
                     String lower = line.toLowerCase(Locale.ROOT);
-                    if (lower.startsWith("proxy-authorization:") || lower.startsWith("proxy-connection:")) {
+                    if (lower.startsWith("proxy-connection:")
+                            || (proxy.hasAuth() && lower.startsWith("proxy-authorization:"))) {
                         continue;
                     }
                     rebuilt.append(line).append("\r\n");
@@ -249,7 +265,7 @@ public class LocalProxyServer {
                     if (statusCode >= 200 && statusCode < 300) {
                         notifySuccess(proxy.getId());
                         relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut);
-                    } else if (statusCode == 407) {
+                    } else if (statusCode == 407 && proxy.hasAuth()) {
                         notifyFailure(proxy.getId(), "Lỗi xác thực Proxy (407)");
                     }
                 } else {
@@ -377,6 +393,17 @@ public class LocalProxyServer {
         }
     }
 
+    private void sendProxyAuthRequired(OutputStream out) {
+        try {
+            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n"
+                    + "Proxy-Authenticate: Basic realm=\"ProxyFlow\"\r\n"
+                    + "Connection: close\r\n\r\n";
+            out.write(resp.getBytes(StandardCharsets.ISO_8859_1));
+            out.flush();
+        } catch (IOException ignored) {
+        }
+    }
+
     private static TargetEndpoint parseTargetEndpoint(String requestLine, String[] lines, boolean isConnect) {
         String[] parts = requestLine.split(" ");
         if (parts.length < 2) {
@@ -450,6 +477,63 @@ public class LocalProxyServer {
         if (eventListener != null) {
             eventListener.onUpstreamFailure(proxyId, reason);
         }
+    }
+
+    private static ProxyConfig applyClientBasicAuthIfPresent(ProxyConfig base, String[] lines) {
+        if (base == null || lines == null) return null;
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line == null) continue;
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("proxy-authorization:")) {
+                String value = line.substring("proxy-authorization:".length()).trim();
+                if (value.toLowerCase(Locale.ROOT).startsWith("basic ")) {
+                    String b64 = value.substring(6).trim();
+                    byte[] decoded = decodeBase64(b64);
+                    if (decoded != null) {
+                        String rawCreds = new String(decoded, StandardCharsets.UTF_8);
+                        int colonIdx = rawCreds.indexOf(':');
+                        String user = colonIdx >= 0 ? rawCreds.substring(0, colonIdx) : rawCreds;
+                        String pass = colonIdx >= 0 ? rawCreds.substring(colonIdx + 1) : "";
+                        if (!user.isEmpty()) {
+                            ProxyConfig copy = base.copy();
+                            copy.setAuthMethod(ProxyConfig.AuthMethod.USER_PASS);
+                            copy.setUsername(user);
+                            copy.setPassword(pass);
+                            return copy;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static byte[] decodeBase64(String input) {
+        if (input == null) return null;
+        String clean = input.trim();
+        if (clean.isEmpty() || (clean.length() % 4) != 0) return null;
+        ByteArrayOutputStream out = new ByteArrayOutputStream((clean.length() * 3) / 4);
+        int buffer = 0;
+        int bits = 0;
+        for (int i = 0; i < clean.length(); i++) {
+            char c = clean.charAt(i);
+            if (c == '=') break;
+            int val;
+            if (c >= 'A' && c <= 'Z') val = c - 'A';
+            else if (c >= 'a' && c <= 'z') val = c - 'a' + 26;
+            else if (c >= '0' && c <= '9') val = c - '0' + 52;
+            else if (c == '+') val = 62;
+            else if (c == '/') val = 63;
+            else return null;
+            buffer = (buffer << 6) | val;
+            bits += 6;
+            if (bits >= 8) {
+                bits -= 8;
+                out.write((buffer >> bits) & 0xFF);
+            }
+        }
+        return out.toByteArray();
     }
 
     private void closeQuietly(Socket socket) {

@@ -291,6 +291,7 @@ public class ProxyRepository {
                         ProxyLogFormatter.getString(appContext, R.string.log_proxy_updated, proxy.getAddressDisplay()));
             } else {
                 long newId = dbHelper.insertProxy(proxy);
+                proxy.setId(newId);
                 if (prefs.getActiveProxyId() <= 0) {
                     prefs.setActiveProxyId(newId);
                 }

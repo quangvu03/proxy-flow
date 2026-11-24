@@ -143,7 +143,7 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
                 tvLatencyBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_error));
                 tvLatencyBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
-                styleConnectButtonError(ctx);
+                styleConnectButtonNormal(ctx);
             } else {
                 tvLatencyBadge.setText(ctx.getString(R.string.latency_ms, lat));
                 if (lat <= 250) {
@@ -180,15 +180,6 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             btnConnectNow.setBackgroundTintList(
                     ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.md_theme_secondaryContainer)));
             int fg = ContextCompat.getColor(ctx, R.color.md_theme_onSecondaryContainer);
-            btnConnectNow.setTextColor(fg);
-            btnConnectNow.setIconTint(ColorStateList.valueOf(fg));
-        }
-
-        private void styleConnectButtonError(Context ctx) {
-            btnConnectNow.setText(R.string.action_proxy_error_no_connect);
-            btnConnectNow.setBackgroundTintList(
-                    ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
-            int fg = ContextCompat.getColor(ctx, R.color.status_error);
             btnConnectNow.setTextColor(fg);
             btnConnectNow.setIconTint(ColorStateList.valueOf(fg));
         }

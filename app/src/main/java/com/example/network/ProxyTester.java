@@ -79,6 +79,10 @@ public final class ProxyTester {
 
             int statusCode = parseHttpStatusCode(statusLine);
             if (statusCode == 407) {
+                if (!proxy.hasAuth()) {
+                    long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+                    return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+                }
                 return new TestResult(false, -1, "", "", "Lỗi 407: Sai tài khoản hoặc mật khẩu");
             }
 
@@ -153,14 +157,28 @@ public final class ProxyTester {
             }
             return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
         } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+            if (!proxy.hasAuth()) {
+                long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+                return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+            }
             return new TestResult(false, -1, "", "",
                     authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
         } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("specified port")) {
+                return new TestResult(false, -1, "", "", e.getMessage());
+            }
             // Fallback CONNECT check to 1.1.1.1:443
             long fallbackStart = System.nanoTime();
             try (Socket ignored = UpstreamProxyConnector.openTunnel(proxy, "1.1.1.1", 443, timeoutMs)) {
                 long elapsedMs = Math.max(1L, (System.nanoTime() - fallbackStart) / 1_000_000L);
                 return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+            } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+                if (!proxy.hasAuth()) {
+                    long elapsedMs = Math.max(1L, (System.nanoTime() - fallbackStart) / 1_000_000L);
+                    return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+                }
+                return new TestResult(false, -1, "", "",
+                        authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
             } catch (IOException fallbackErr) {
                 String msg = fallbackErr.getMessage() != null ? fallbackErr.getMessage() : "Không thể kết nối SOCKS5 Proxy";
                 return new TestResult(false, -1, "", "", msg);
@@ -194,6 +212,9 @@ public final class ProxyTester {
             int code = parseHttpStatusCode(statusLine);
             long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
             if (code == 407) {
+                if (!proxy.hasAuth()) {
+                    return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+                }
                 return new TestResult(false, -1, "", "", "Lỗi 407: Sai tài khoản hoặc mật khẩu");
             }
             if (code >= 200 && code < 300) {

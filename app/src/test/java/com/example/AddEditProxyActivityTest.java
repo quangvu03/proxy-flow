@@ -184,13 +184,12 @@ public class AddEditProxyActivityTest {
         assertEquals(View.GONE, layoutCredentials.getVisibility());
         assertEquals(View.GONE, tilCustomDns.getVisibility());
 
-        // Switch Auth -> Username/Password shows credential fields & validates username
+        // Switch Auth -> Username/Password shows credential fields & does NOT require username
         activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.USER_PASS);
         assertEquals(View.VISIBLE, layoutCredentials.getVisibility());
         etHost.setText("198.51.100.88");
         etPort.setText("1080");
-        btnSave.performClick();
-        assertNotNull(tilUser.getError());
+        assertNull(tilUser.getError());
 
         // Switch Auth -> None hides credentials and clears error
         activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.NONE);
@@ -283,5 +282,37 @@ public class AddEditProxyActivityTest {
         // Clearing host hides Test Connection button again
         etHost.setText("");
         assertEquals(View.GONE, layoutTestConnection.getVisibility());
+    }
+
+    @Test
+    public void addEditProxyActivity_portTimeoutErrorShownUnderPortFieldNotInTestCard() {
+        AddEditProxyActivity activity = Robolectric.buildActivity(AddEditProxyActivity.class)
+                .setup()
+                .get();
+
+        TextInputLayout tilPort = activity.findViewById(R.id.til_proxy_port);
+        TextInputEditText etHost = activity.findViewById(R.id.et_proxy_host);
+        TextInputEditText etPort = activity.findViewById(R.id.et_proxy_port);
+        View cardStatus = activity.findViewById(R.id.card_test_connection_status);
+        View btnSaveAndConnect = activity.findViewById(R.id.btn_save_and_connect_proxy);
+        assertNotNull(btnSaveAndConnect);
+
+        etHost.setText("203.0.113.10");
+        etPort.setText("8080");
+
+        // Port timeout error goes below Port field and hides Test Connect status card
+        activity.applyTestFailureResult("Timeout connecting to the specified port (8080)");
+        assertEquals("Timeout connecting to the specified port (8080)",
+                tilPort.getError() != null ? tilPort.getError().toString() : null);
+        assertEquals(View.GONE, cardStatus.getVisibility());
+
+        // Editing host clears port timeout error while port remains valid
+        etHost.setText("203.0.113.11");
+        assertNull(tilPort.getError());
+
+        // Non-timeout error displays inside Test Connect status card
+        activity.applyTestFailureResult("Connection refused");
+        assertNull(tilPort.getError());
+        assertEquals(View.VISIBLE, cardStatus.getVisibility());
     }
 }

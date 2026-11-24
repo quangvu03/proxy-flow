@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 import javax.net.ssl.SSLSocket;
@@ -34,7 +35,12 @@ public final class UpstreamProxyConnector {
         }
         Socket tcp = new Socket();
         try {
-            tcp.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+            try {
+                tcp.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+            } catch (SocketTimeoutException ste) {
+                throw new SocketTimeoutException(
+                        "Timeout connecting to the specified port (" + proxy.getPort() + ")");
+            }
             tcp.setSoTimeout(timeoutMs);
             if (proxy.isTlsProtocol()) {
                 SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
@@ -87,6 +93,9 @@ public final class UpstreamProxyConnector {
         }
         int code = ProxyTester.parseHttpStatusCode(statusLine);
         if (code == 407) {
+            if (!proxy.hasAuth()) {
+                throw new ProxyAuthException("Proxy yêu cầu xác thực (chế độ không tài khoản)");
+            }
             throw new ProxyAuthException("Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy");
         }
         if (code < 200 || code >= 300) {
@@ -120,11 +129,12 @@ public final class UpstreamProxyConnector {
             throw new ProxyAuthException("SOCKS5 server rejected authentication methods");
         }
         if (method == 0x02) {
-            if (!proxy.hasAuth()) {
-                throw new ProxyAuthException("SOCKS5 requires username/password");
-            }
-            byte[] userBytes = proxy.getUsername().getBytes(StandardCharsets.UTF_8);
-            byte[] passBytes = proxy.getPassword().getBytes(StandardCharsets.UTF_8);
+            byte[] userBytes = proxy.hasAuth()
+                    ? proxy.getUsername().getBytes(StandardCharsets.UTF_8)
+                    : new byte[0];
+            byte[] passBytes = proxy.hasAuth()
+                    ? proxy.getPassword().getBytes(StandardCharsets.UTF_8)
+                    : new byte[0];
             if (userBytes.length > 255 || passBytes.length > 255) {
                 throw new ProxyAuthException("SOCKS5 credentials exceed 255 bytes");
             }
@@ -140,6 +150,9 @@ public final class UpstreamProxyConnector {
             int authVer = in.readUnsignedByte();
             int authStatus = in.readUnsignedByte();
             if (authVer != 0x01 || authStatus != 0x00) {
+                if (!proxy.hasAuth()) {
+                    throw new ProxyAuthException("SOCKS5 yêu cầu xác thực (chế độ không tài khoản)");
+                }
                 throw new ProxyAuthException("Lỗi xác thực SOCKS5: Sai tài khoản hoặc mật khẩu");
             }
         } else if (method != 0x00) {

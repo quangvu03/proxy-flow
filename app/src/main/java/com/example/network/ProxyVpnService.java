@@ -257,50 +257,6 @@ public class ProxyVpnService extends VpnService
                     0L
             ));
 
-            // Check proxy before establishing VPN tunnel; if faulty, refuse connection immediately
-            long nowMs = System.currentTimeMillis();
-            boolean freshlyVerifiedHealthy = chosen.getLatencyMs() > 0
-                    && chosen.getLastCheckedAt() > 0L
-                    && (nowMs - chosen.getLastCheckedAt()) <= 5_000L;
-            if (!freshlyVerifiedHealthy) {
-                ProxyTester.TestResult preCheck = ProxyTester.testProxy(chosen, 6000);
-                if (stopping.get()) {
-                    return;
-                }
-                if (!preCheck.isSuccess()) {
-                    String reason = !preCheck.getErrorMessage().isEmpty()
-                            ? preCheck.getErrorMessage()
-                            : ProxyLogFormatter.getString(this, R.string.status_error);
-                    chosen.setLatencyMs(ProxyConfig.LATENCY_FAILED);
-                    chosen.setFailCount(chosen.getFailCount() + 1);
-                    repository.updateTelemetrySync(
-                            chosen.getId(),
-                            ProxyConfig.LATENCY_FAILED,
-                            chosen.getExitIp(),
-                            chosen.getCountry(),
-                            chosen.getFailCount()
-                    );
-                    repository.addLog(ProxyLogEntry.Level.ERROR,
-                            ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
-                                    chosen.getAddressDisplay(), reason));
-                    String blockedMsg = ProxyLogFormatter.getString(this, R.string.msg_proxy_connect_blocked_error,
-                            chosen.getDisplayTitle(), reason);
-                    stopTunnelAndService(blockedMsg, null, false);
-                    return;
-                }
-                chosen.setLatencyMs(preCheck.getLatencyMs());
-                chosen.setExitIp(preCheck.getExitIp());
-                chosen.setCountry(preCheck.getCountry());
-                chosen.setFailCount(0);
-                repository.updateTelemetrySync(
-                        chosen.getId(),
-                        preCheck.getLatencyMs(),
-                        preCheck.getExitIp(),
-                        preCheck.getCountry(),
-                        0
-                );
-            }
-
             repository.markActiveProxySync(chosen.getId());
 
             try {
@@ -432,41 +388,6 @@ public class ProxyVpnService extends VpnService
                 startTunnelAsync(targetId);
                 return;
             }
-            long nowMs = System.currentTimeMillis();
-            boolean freshlyVerifiedHealthy = target.getLatencyMs() > 0
-                    && target.getLastCheckedAt() > 0L
-                    && (nowMs - target.getLastCheckedAt()) <= 5_000L;
-            if (!freshlyVerifiedHealthy) {
-                ProxyTester.TestResult check = ProxyTester.testProxy(target, 6000);
-                if (!check.isSuccess()) {
-                    String reason = !check.getErrorMessage().isEmpty()
-                            ? check.getErrorMessage()
-                            : ProxyLogFormatter.getString(this, R.string.status_error);
-                    repository.updateTelemetrySync(
-                            target.getId(),
-                            ProxyConfig.LATENCY_FAILED,
-                            target.getExitIp(),
-                            target.getCountry(),
-                            target.getFailCount() + 1
-                    );
-                    repository.addLog(ProxyLogEntry.Level.ERROR,
-                            ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
-                                    target.getAddressDisplay(), reason));
-                    return;
-                }
-                target.setLatencyMs(check.getLatencyMs());
-                target.setExitIp(check.getExitIp());
-                target.setCountry(check.getCountry());
-                target.setFailCount(0);
-                repository.updateTelemetrySync(
-                        target.getId(),
-                        check.getLatencyMs(),
-                        check.getExitIp(),
-                        check.getCountry(),
-                        0
-                );
-            }
-            if (!isRunning.get()) return;
             applyManualProxyChange(target);
         });
     }

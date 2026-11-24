@@ -82,7 +82,9 @@
     <string name="hint_custom_dns">Custom DNS Server (e.g. 9.9.9.9)</string>
     <string name="action_paste_parse">Paste &amp; Auto-Parse (ip:port:user:pass)</string>
     <string name="action_save">Save Proxy</string>
+    <string name="action_save_and_connect">Connect</string>
     <string name="action_cancel">Cancel</string>
+    <string name="label_auth_optional_hint">Edit auth or leave username and password blank to connect directly without wrong-credential errors.</string>
     <string name="error_host_required">Please enter a Server / IP address</string>
     <string name="error_port_required">Please enter a port (1 – 65535)</string>
     <string name="error_port_invalid">Port exceeds limit (allowed: 1 – 65535)</string>
@@ -449,7 +451,7 @@
     <string name="action_connect_checking">Checking…</string>
     <string name="action_proxy_error_no_connect">Proxy Error</string>
     <string name="filter_error">Error</string>
-    <string name="msg_batch_test_summary">Checked %1$d Proxies: %2$d working, %3$d failed (blocked)</string>
+    <string name="msg_batch_test_summary">Checked %1$d Proxies: %2$d working, %3$d failed</string>
     <string name="log_proxy_connect_refused">Refused connecting to faulty Proxy %1$s (%2$s)</string>
 
     <string name="label_app_version">Version: %1$s • 100%% Java</string>

@@ -82,7 +82,9 @@
     <string name="hint_custom_dns">Máy chủ DNS tùy chỉnh (VD: 9.9.9.9)</string>
     <string name="action_paste_parse">Dán &amp; tự tách (ip:port:user:pass)</string>
     <string name="action_save">Lưu Proxy</string>
+    <string name="action_save_and_connect">Kết nối</string>
     <string name="action_cancel">Hủy</string>
+    <string name="label_auth_optional_hint">Có thể chỉnh sửa hoặc để trống tài khoản và mật khẩu để kết nối trực tiếp, tránh báo lỗi sai tài khoản/mật khẩu.</string>
     <string name="error_host_required">Vui lòng nhập địa chỉ Server / IP</string>
     <string name="error_port_required">Vui lòng nhập cổng (1 – 65535)</string>
     <string name="error_port_invalid">Cổng vượt giới hạn (chỉ cho phép từ 1 đến 65535)</string>
@@ -449,7 +451,7 @@
     <string name="action_connect_checking">Đang kiểm tra…</string>
     <string name="action_proxy_error_no_connect">Proxy lỗi</string>
     <string name="filter_error">Lỗi</string>
-    <string name="msg_batch_test_summary">Kiểm tra %1$d Proxy: %2$d hoạt động, %3$d lỗi (không thể kết nối)</string>
+    <string name="msg_batch_test_summary">Kiểm tra %1$d Proxy: %2$d hoạt động, %3$d lỗi</string>
     <string name="log_proxy_connect_refused">Từ chối kết nối Proxy lỗi %1$s (%2$s)</string>
 
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>

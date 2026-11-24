@@ -1,8 +1,13 @@
 package com.example.ui;
 
+import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.VpnService;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -13,8 +18,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
@@ -23,11 +31,14 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.R;
 import com.example.data.ProxyRepository;
+import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyConfig.AuthMethod;
 import com.example.model.ProxyConfig.DnsMode;
 import com.example.model.ProxyConfig.Protocol;
+import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyTester;
+import com.example.network.ProxyVpnService;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -35,6 +46,7 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -84,6 +96,26 @@ public class AddEditProxyActivity extends AppCompatActivity {
     private TextInputLayout tilCustomDns;
     private TextInputEditText etCustomDns;
     private MaterialButton btnSave;
+    private MaterialButton btnSaveAndConnect;
+
+    private long pendingConnectProxyId = -1L;
+
+    private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == RESULT_OK) {
+                    launchVpnAfterPermissions(pendingConnectProxyId);
+                } else {
+                    if (!isFinishing() && !isDestroyed()) {
+                        Toast.makeText(this, R.string.msg_vpn_permission_denied, Toast.LENGTH_SHORT).show();
+                        setResult(RESULT_OK);
+                        finish();
+                    }
+                }
+            });
+
+    private final ActivityResultLauncher<String> notificationPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted ->
+                    proceedWithVpnPreparation(pendingConnectProxyId));
 
     private final Protocol[] protocols = new Protocol[]{
             Protocol.SOCKS5,
@@ -153,6 +185,7 @@ public class AddEditProxyActivity extends AppCompatActivity {
         etCustomDns = findViewById(R.id.et_proxy_custom_dns);
         MaterialButton btnCancel = findViewById(R.id.btn_cancel_proxy);
         btnSave = findViewById(R.id.btn_save_proxy);
+        btnSaveAndConnect = findViewById(R.id.btn_save_and_connect_proxy);
 
         setupDropdowns();
         setupServerFieldWatchers();
@@ -184,7 +217,10 @@ public class AddEditProxyActivity extends AppCompatActivity {
         btnPasteParse.setOnClickListener(v -> pasteAndParseFromClipboard());
         btnTestConnection.setOnClickListener(v -> testProxyConnection());
         btnCancel.setOnClickListener(v -> finish());
-        btnSave.setOnClickListener(v -> validateAndSave());
+        btnSave.setOnClickListener(v -> validateAndSave(false));
+        if (btnSaveAndConnect != null) {
+            btnSaveAndConnect.setOnClickListener(v -> validateAndSave(true));
+        }
     }
 
     @Override
@@ -208,6 +244,10 @@ public class AddEditProxyActivity extends AppCompatActivity {
                 String host = s != null ? s.toString().trim() : "";
                 if (!host.isEmpty()) {
                     tilHost.setError(null);
+                }
+                String portText = etPort.getText() != null ? etPort.getText().toString().trim() : "";
+                if (portText.isEmpty() || parseValidPort(portText) != -1) {
+                    tilPort.setError(null);
                 }
                 resetTestConnectionStatus();
                 updateTestConnectionVisibility();
@@ -235,6 +275,21 @@ public class AddEditProxyActivity extends AppCompatActivity {
                 updateTestConnectionVisibility();
             }
         });
+
+        TextWatcher credWatcher = new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                resetTestConnectionStatus();
+            }
+        };
+        etUser.addTextChangedListener(credWatcher);
+        etPass.addTextChangedListener(credWatcher);
     }
 
     private void setupDropdowns() {
@@ -291,6 +346,7 @@ public class AddEditProxyActivity extends AppCompatActivity {
             layoutCredentials.setVisibility(View.GONE);
             tilUser.setError(null);
         }
+        resetTestConnectionStatus();
     }
 
     public void applyDnsModeSelection(DnsMode dnsMode) {
@@ -348,15 +404,22 @@ public class AddEditProxyActivity extends AppCompatActivity {
             updateTestConnectionVisibility();
             return;
         }
+        tilPort.setError(null);
 
         ProxyConfig probe = new ProxyConfig();
         probe.setProtocol(selectedProtocol);
         probe.setHost(host);
         probe.setPort(port);
-        probe.setAuthMethod(selectedAuthMethod);
-        if (selectedAuthMethod == AuthMethod.USER_PASS) {
-            probe.setUsername(etUser.getText() != null ? etUser.getText().toString().trim() : "");
-            probe.setPassword(etPass.getText() != null ? etPass.getText().toString() : "");
+        String user = etUser.getText() != null ? etUser.getText().toString().trim() : "";
+        String pass = etPass.getText() != null ? etPass.getText().toString() : "";
+        if (selectedAuthMethod == AuthMethod.USER_PASS && !user.isEmpty()) {
+            probe.setAuthMethod(AuthMethod.USER_PASS);
+            probe.setUsername(user);
+            probe.setPassword(pass);
+        } else {
+            probe.setAuthMethod(AuthMethod.NONE);
+            probe.setUsername("");
+            probe.setPassword("");
         }
 
         btnTestConnection.setEnabled(false);
@@ -373,6 +436,8 @@ public class AddEditProxyActivity extends AppCompatActivity {
                 btnTestConnection.setEnabled(true);
                 progressTestConnection.setVisibility(View.GONE);
                 if (result.isSuccess()) {
+                    tilPort.setError(null);
+                    cardTestConnectionStatus.setVisibility(View.VISIBLE);
                     cardTestConnectionStatus.setStrokeColor(ContextCompat.getColor(this, R.color.status_connected));
                     tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
                     if (!result.getExitIp().isEmpty()) {
@@ -383,15 +448,48 @@ public class AddEditProxyActivity extends AppCompatActivity {
                                 R.string.msg_test_connection_ok, result.getLatencyMs()));
                     }
                 } else {
-                    cardTestConnectionStatus.setStrokeColor(ContextCompat.getColor(this, R.color.status_error));
-                    tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.status_error));
-                    String err = result.getErrorMessage().isEmpty()
-                            ? getString(R.string.latency_failed)
-                            : result.getErrorMessage();
-                    tvTestConnectionResult.setText(getString(R.string.msg_test_connection_failed, err));
+                    applyTestFailureResult(result.getErrorMessage());
                 }
             });
         });
+    }
+
+    @VisibleForTesting
+    public void applyTestFailureResult(@Nullable String errorMessage) {
+        String err = (errorMessage == null || errorMessage.trim().isEmpty())
+                ? getString(R.string.latency_failed)
+                : errorMessage.trim();
+        if (isPortTimeoutError(err)) {
+            if (cardTestConnectionStatus != null) {
+                cardTestConnectionStatus.setVisibility(View.GONE);
+            }
+            if (tilPort != null) {
+                tilPort.setError(err);
+            }
+        } else {
+            if (cardTestConnectionStatus != null) {
+                cardTestConnectionStatus.setVisibility(View.VISIBLE);
+                cardTestConnectionStatus.setStrokeColor(ContextCompat.getColor(this, R.color.status_error));
+            }
+            if (tvTestConnectionResult != null) {
+                tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.status_error));
+                tvTestConnectionResult.setText(getString(R.string.msg_test_connection_failed, err));
+            }
+        }
+    }
+
+    public static boolean isPortTimeoutError(@Nullable String errorMessage) {
+        if (errorMessage == null || errorMessage.trim().isEmpty()) {
+            return false;
+        }
+        String lower = errorMessage.toLowerCase(Locale.ROOT);
+        return lower.contains("timeout connecting to the specified port")
+                || lower.contains("timeout connecting")
+                || lower.contains("connect timed out")
+                || lower.contains("timed out")
+                || lower.contains("timeout")
+                || lower.contains("quá thời gian")
+                || lower.contains("failed to connect");
     }
 
     private void loadExistingProxy(long proxyId, boolean populateFields) {
@@ -456,7 +554,7 @@ public class AddEditProxyActivity extends AppCompatActivity {
         Toast.makeText(this, R.string.msg_clipboard_invalid, Toast.LENGTH_SHORT).show();
     }
 
-    private void validateAndSave() {
+    private void validateAndSave(boolean connectAfterSave) {
         String host = etHost.getText() != null ? etHost.getText().toString().trim() : "";
         String portStr = etPort.getText() != null ? etPort.getText().toString().trim() : "";
         String name = etName.getText() != null ? etName.getText().toString().trim() : "";
@@ -484,15 +582,10 @@ public class AddEditProxyActivity extends AppCompatActivity {
         }
         tilPort.setError(null);
 
-        if (selectedAuthMethod == AuthMethod.USER_PASS) {
-            if (user.isEmpty()) {
-                tilUser.setError(getString(R.string.error_username_required));
-                etUser.requestFocus();
-                return;
-            }
-            tilUser.setError(null);
-        } else {
-            tilUser.setError(null);
+        tilUser.setError(null);
+        AuthMethod effectiveAuthMethod = selectedAuthMethod;
+        if (effectiveAuthMethod != AuthMethod.USER_PASS || user.isEmpty()) {
+            effectiveAuthMethod = AuthMethod.NONE;
             user = "";
             pass = "";
         }
@@ -514,20 +607,73 @@ public class AddEditProxyActivity extends AppCompatActivity {
         result.setProtocol(selectedProtocol);
         result.setHost(host);
         result.setPort(port);
-        result.setAuthMethod(selectedAuthMethod);
+        result.setAuthMethod(effectiveAuthMethod);
         result.setUsername(user);
         result.setPassword(pass);
         result.setDnsMode(selectedDnsMode);
         result.setCustomDns(customDns);
 
         btnSave.setEnabled(false);
-        repository.addOrUpdateProxy(result, () -> runOnUiThread(() -> {
-            if (!isFinishing() && !isDestroyed()) {
-                Toast.makeText(this, R.string.msg_proxy_saved, Toast.LENGTH_SHORT).show();
-                setResult(RESULT_OK);
-                finish();
+        if (btnSaveAndConnect != null) {
+            btnSaveAndConnect.setEnabled(false);
+        }
+        repository.addOrUpdateProxy(result, () -> {
+            if (connectAfterSave && result.getId() > 0) {
+                repository.markActiveProxySync(result.getId());
             }
-        }));
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                Toast.makeText(this, R.string.msg_proxy_saved, Toast.LENGTH_SHORT).show();
+                if (connectAfterSave && result.getId() > 0) {
+                    connectSavedProxyImmediately(result.getId());
+                } else {
+                    setResult(RESULT_OK);
+                    finish();
+                }
+            });
+        });
+    }
+
+    private void connectSavedProxyImmediately(long proxyId) {
+        ConnectionStatus currentStatus = ProxyRuntimeManager.getInstance().getCurrentStatus();
+        if (currentStatus.isRunning()) {
+            ProxyVpnService.switchToProxy(this, proxyId);
+            setResult(RESULT_OK);
+            finish();
+        } else {
+            startVpnWithPermissions(proxyId);
+        }
+    }
+
+    private void startVpnWithPermissions(long proxyId) {
+        pendingConnectProxyId = proxyId;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+                return;
+            }
+        }
+        proceedWithVpnPreparation(proxyId);
+    }
+
+    private void proceedWithVpnPreparation(long proxyId) {
+        Intent prepareIntent = VpnService.prepare(this);
+        if (prepareIntent != null) {
+            vpnPermissionLauncher.launch(prepareIntent);
+        } else {
+            launchVpnAfterPermissions(proxyId);
+        }
+    }
+
+    private void launchVpnAfterPermissions(long proxyId) {
+        ProxyVpnService.startVpn(this, proxyId);
+        if (!isFinishing() && !isDestroyed()) {
+            setResult(RESULT_OK);
+            finish();
+        }
     }
 
     private static int parseValidPort(String raw) {
