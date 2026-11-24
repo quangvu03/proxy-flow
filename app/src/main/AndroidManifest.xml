@@ -50,7 +50,20 @@
             android:theme="@style/Theme.ProxyFlow" />
 
         <activity
+            android:name=".ui.AddEditProxyActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.IpCheckActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow" />
+
+        <activity
+            android:name=".ui.NetworkSpeedActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.ProxyFlow" />

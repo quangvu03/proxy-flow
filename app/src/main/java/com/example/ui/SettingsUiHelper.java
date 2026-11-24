@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.example.BuildConfig;
 import com.example.R;
+import com.example.data.ProxyLogFormatter;
 import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
 import com.example.data.SettingsPreferences.AppLanguage;
@@ -107,10 +108,10 @@ public final class SettingsUiHelper {
                     if (r.isEnabled()) enabledRules++;
                 }
                 repository.addLog(ProxyLogEntry.Level.INFO,
-                        context.getString(R.string.log_firewall_toggled_on, enabledRules));
+                        ProxyLogFormatter.getString(context, R.string.log_firewall_toggled_on, enabledRules));
             } else {
                 repository.addLog(ProxyLogEntry.Level.INFO,
-                        context.getString(R.string.log_firewall_toggled_off));
+                        ProxyLogFormatter.getString(context, R.string.log_firewall_toggled_off));
             }
             reapplyVpnPoliciesIfRunning(context);
         });
@@ -129,11 +130,11 @@ public final class SettingsUiHelper {
             updatePrivateRoutingSubtitle(context, settingsPrefs, tvPrivateRoutingSubtitle);
             if (isChecked) {
                 repository.addLog(ProxyLogEntry.Level.INFO,
-                        context.getString(R.string.log_private_routing_enabled,
+                        ProxyLogFormatter.getString(context, R.string.log_private_routing_enabled,
                                 settingsPrefs.getPrivateNetworkRangesList().size()));
             } else {
                 repository.addLog(ProxyLogEntry.Level.INFO,
-                        context.getString(R.string.log_private_routing_disabled));
+                        ProxyLogFormatter.getString(context, R.string.log_private_routing_disabled));
             }
             reapplyVpnPoliciesIfRunning(context);
         });
@@ -264,11 +265,11 @@ public final class SettingsUiHelper {
                 updatePrivateRoutingSubtitle(context, prefs, tvPrivateRoutingSubtitle);
                 if (enabled) {
                     repository.addLog(ProxyLogEntry.Level.INFO,
-                            context.getString(R.string.log_private_routing_enabled,
+                            ProxyLogFormatter.getString(context, R.string.log_private_routing_enabled,
                                     prefs.getPrivateNetworkRangesList().size()));
                 } else {
                     repository.addLog(ProxyLogEntry.Level.INFO,
-                            context.getString(R.string.log_private_routing_disabled));
+                            ProxyLogFormatter.getString(context, R.string.log_private_routing_disabled));
                 }
                 Toast.makeText(context, R.string.msg_private_routing_saved, Toast.LENGTH_SHORT).show();
                 reapplyVpnPoliciesIfRunning(context);

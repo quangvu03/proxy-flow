@@ -2,6 +2,7 @@ package com.example.data;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
@@ -12,6 +13,7 @@ import com.example.network.PrivateNetworkMatcher;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -311,5 +313,34 @@ public class SettingsPreferences {
         } else {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language.getTag()));
         }
+    }
+
+    public static Locale resolveEffectiveLocale(Context context) {
+        AppLanguage language = new SettingsPreferences(context).getAppLanguage();
+        if (language == AppLanguage.EN) {
+            return Locale.ENGLISH;
+        }
+        if (language == AppLanguage.VI) {
+            return new Locale("vi");
+        }
+        LocaleListCompat appLocales = AppCompatDelegate.getApplicationLocales();
+        if (!appLocales.isEmpty() && appLocales.get(0) != null) {
+            return appLocales.get(0);
+        }
+        Configuration cfg = context.getResources().getConfiguration();
+        Locale current = !cfg.getLocales().isEmpty() ? cfg.getLocales().get(0) : null;
+        return current != null ? current : Locale.getDefault();
+    }
+
+    public static Context getLocalizedContext(Context context) {
+        AppLanguage language = new SettingsPreferences(context).getAppLanguage();
+        LocaleListCompat appLocales = AppCompatDelegate.getApplicationLocales();
+        if (language == AppLanguage.SYSTEM && appLocales.isEmpty()) {
+            return context;
+        }
+        Locale target = resolveEffectiveLocale(context);
+        Configuration config = new Configuration(context.getResources().getConfiguration());
+        config.setLocale(target);
+        return context.createConfigurationContext(config);
     }
 }

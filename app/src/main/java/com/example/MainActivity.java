@@ -28,23 +28,33 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.auth.GoogleAuthManager;
+import com.example.data.ProxyLogFormatter;
+import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
+import com.example.model.ProxyLogEntry;
 import com.example.network.ProxyRuntimeManager;
+import com.example.network.ProxyTester;
 import com.example.network.ProxyVpnService;
 import com.example.ui.AppProxyFragment;
 import com.example.ui.ConnectFragment;
 import com.example.ui.GoogleLoginActivity;
 import com.example.ui.LogsFragment;
+import com.example.ui.ProxyDetailActivity;
 import com.example.ui.ProxyListFragment;
 import com.example.ui.ProxyViewModel;
 import com.example.ui.SettingsFragment;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.navigationrail.NavigationRailView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Code viết bằng java, sử dụng Android SDK và các thư viện hỗ trợ của Android để xây dựng một ứng dụng quản lý VPN và proxy.
@@ -60,10 +70,18 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         hasShownStartupSplash = false;
     }
 
+    public interface ProxyVerifier {
+        ProxyTester.TestResult verify(ProxyConfig proxy, int timeoutMs);
+    }
+
     private final Handler splashHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService connectCheckExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean isVerifyingBeforeConnect = new AtomicBoolean(false);
+    private ProxyVerifier proxyVerifier = ProxyTester::testProxy;
     private View splashOverlay;
     private Runnable hideSplashRunnable;
 
+    private ProxyRepository repository;
     private ProxyViewModel viewModel;
     private MaterialToolbar topAppBar;
     private BottomNavigationView bottomNav;
@@ -76,6 +94,11 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
 
     private int currentTabId = R.id.nav_connect;
     private long pendingVpnProxyId = -1L;
+
+    @androidx.annotation.VisibleForTesting
+    public void setProxyVerifierForTests(@androidx.annotation.NonNull ProxyVerifier verifier) {
+        this.proxyVerifier = verifier;
+    }
 
     private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -98,6 +121,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        repository = ProxyRepository.getInstance(this);
         viewModel = new ViewModelProvider(this).get(ProxyViewModel.class);
 
         topAppBar = findViewById(R.id.top_app_bar);
@@ -272,6 +296,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             splashHandler.removeCallbacks(hideSplashRunnable);
         }
         splashHandler.removeCallbacksAndMessages(null);
+        connectCheckExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -355,24 +380,122 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             return;
         }
         long targetId = proxy != null ? proxy.getId() : -1L;
-        if (targetId <= 0 && (viewModel.getProxies().getValue() == null || viewModel.getProxies().getValue().isEmpty())) {
-            Toast.makeText(this, R.string.msg_no_proxy_to_connect, Toast.LENGTH_SHORT).show();
-            onNavigateToTab(R.id.nav_proxies);
-            return;
-        }
-        startVpnWithPermissions(targetId);
+        verifyAndConnectProxy(targetId, false);
     }
 
     @Override
     public void onRequestConnectProxy(long proxyId) {
-        ConnectionStatus status = ProxyRuntimeManager.getInstance().getCurrentStatus();
-        if (status.isRunning()) {
-            ProxyVpnService.switchToProxy(this, proxyId);
-            onNavigateToTab(R.id.nav_connect);
-        } else {
-            startVpnWithPermissions(proxyId);
-            onNavigateToTab(R.id.nav_connect);
+        verifyAndConnectProxy(proxyId, true);
+    }
+
+    private void verifyAndConnectProxy(long requestedProxyId, boolean switchIfRunning) {
+        if (!isVerifyingBeforeConnect.compareAndSet(false, true)) {
+            return;
         }
+        connectCheckExecutor.execute(() -> {
+            try {
+                ProxyConfig target = requestedProxyId > 0
+                        ? repository.getProxyByIdSync(requestedProxyId)
+                        : repository.getActiveProxySync();
+                if (target == null) {
+                    target = repository.getActiveProxySync();
+                }
+                if (target == null) {
+                    runOnUiThread(() -> {
+                        if (!isFinishing() && !isDestroyed()) {
+                            Toast.makeText(this, R.string.msg_no_proxy_to_connect, Toast.LENGTH_SHORT).show();
+                            onNavigateToTab(R.id.nav_proxies);
+                        }
+                    });
+                    return;
+                }
+
+                ConnectionStatus currentStatus = ProxyRuntimeManager.getInstance().getCurrentStatus();
+                boolean vpnAlreadyRunning = currentStatus.isRunning();
+                if (!vpnAlreadyRunning) {
+                    ProxyRuntimeManager.getInstance().postStatus(new ConnectionStatus(
+                            ConnectionStatus.State.CONNECTING,
+                            target,
+                            0,
+                            0L,
+                            0L,
+                            0,
+                            "",
+                            0L
+                    ));
+                }
+
+                ProxyTester.TestResult result = proxyVerifier.verify(target, 6000);
+                if (result == null || !result.isSuccess()) {
+                    String reason = (result != null && !result.getErrorMessage().isEmpty())
+                            ? result.getErrorMessage()
+                            : ProxyLogFormatter.getString(this, R.string.status_error);
+                    repository.updateTelemetrySync(
+                            target.getId(),
+                            ProxyConfig.LATENCY_FAILED,
+                            target.getExitIp(),
+                            target.getCountry(),
+                            target.getFailCount() + 1
+                    );
+                    repository.addLog(
+                            ProxyLogEntry.Level.ERROR,
+                            ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
+                                    target.getAddressDisplay(), reason)
+                    );
+                    String blockedMsg = getString(R.string.msg_proxy_connect_blocked_error,
+                            target.getDisplayTitle(), reason);
+                    if (!vpnAlreadyRunning) {
+                        ProxyRuntimeManager.getInstance().postDisconnected(target, blockedMsg);
+                    }
+                    final long blockedProxyId = target.getId();
+                    runOnUiThread(() -> showProxyBlockedDialog(blockedProxyId, blockedMsg));
+                    return;
+                }
+
+                repository.updateTelemetrySync(
+                        target.getId(),
+                        result.getLatencyMs(),
+                        result.getExitIp(),
+                        result.getCountry(),
+                        0
+                );
+                repository.markActiveProxySync(target.getId());
+                final long healthyProxyId = target.getId();
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (vpnAlreadyRunning && switchIfRunning) {
+                        ProxyVpnService.switchToProxy(this, healthyProxyId);
+                        onNavigateToTab(R.id.nav_connect);
+                    } else {
+                        startVpnWithPermissions(healthyProxyId);
+                        if (switchIfRunning) {
+                            onNavigateToTab(R.id.nav_connect);
+                        }
+                    }
+                });
+            } finally {
+                isVerifyingBeforeConnect.set(false);
+            }
+        });
+    }
+
+    private void showProxyBlockedDialog(long proxyId, String message) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.title_proxy_error_blocked)
+                .setMessage(message)
+                .setNegativeButton(android.R.string.ok, null)
+                .setPositiveButton(R.string.action_inspect_detail, (dialog, which) -> {
+                    Intent detailIntent = new Intent(this, ProxyDetailActivity.class);
+                    detailIntent.putExtra(ProxyDetailActivity.EXTRA_PROXY_ID, proxyId);
+                    startActivity(detailIntent);
+                })
+                .show();
     }
 
     private void startVpnWithPermissions(long proxyId) {

@@ -18,6 +18,7 @@ import android.system.OsConstants;
 import androidx.annotation.NonNull;
 import com.example.R;
 import com.example.data.InstalledAppScanner;
+import com.example.data.ProxyLogFormatter;
 import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
 import com.example.model.AppProxyRule;
@@ -232,8 +233,9 @@ public class ProxyVpnService extends VpnService
                 chosen = repository.getActiveProxySync();
             }
             if (chosen == null) {
-                repository.addLog(ProxyLogEntry.Level.ERROR, "Không có Proxy nào trong danh sách để kết nối");
-                stopTunnelAndService(getString(R.string.msg_no_proxy_to_connect));
+                repository.addLog(ProxyLogEntry.Level.ERROR,
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_no_proxy));
+                stopTunnelAndService(ProxyLogFormatter.getString(this, R.string.msg_no_proxy_to_connect));
                 return;
             }
 
@@ -244,7 +246,6 @@ public class ProxyVpnService extends VpnService
             telemetryTickCounter.set(0);
             lastUpstreamSuccessMs.set(System.currentTimeMillis());
 
-            repository.markActiveProxySync(chosen.getId());
             runtimeManager.postStatus(new ConnectionStatus(
                     ConnectionStatus.State.CONNECTING,
                     chosen,
@@ -255,6 +256,52 @@ public class ProxyVpnService extends VpnService
                     "",
                     0L
             ));
+
+            // Check proxy before establishing VPN tunnel; if faulty, refuse connection immediately
+            long nowMs = System.currentTimeMillis();
+            boolean freshlyVerifiedHealthy = chosen.getLatencyMs() > 0
+                    && chosen.getLastCheckedAt() > 0L
+                    && (nowMs - chosen.getLastCheckedAt()) <= 5_000L;
+            if (!freshlyVerifiedHealthy) {
+                ProxyTester.TestResult preCheck = ProxyTester.testProxy(chosen, 6000);
+                if (stopping.get()) {
+                    return;
+                }
+                if (!preCheck.isSuccess()) {
+                    String reason = !preCheck.getErrorMessage().isEmpty()
+                            ? preCheck.getErrorMessage()
+                            : ProxyLogFormatter.getString(this, R.string.status_error);
+                    chosen.setLatencyMs(ProxyConfig.LATENCY_FAILED);
+                    chosen.setFailCount(chosen.getFailCount() + 1);
+                    repository.updateTelemetrySync(
+                            chosen.getId(),
+                            ProxyConfig.LATENCY_FAILED,
+                            chosen.getExitIp(),
+                            chosen.getCountry(),
+                            chosen.getFailCount()
+                    );
+                    repository.addLog(ProxyLogEntry.Level.ERROR,
+                            ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
+                                    chosen.getAddressDisplay(), reason));
+                    String blockedMsg = ProxyLogFormatter.getString(this, R.string.msg_proxy_connect_blocked_error,
+                            chosen.getDisplayTitle(), reason);
+                    stopTunnelAndService(blockedMsg, null, false);
+                    return;
+                }
+                chosen.setLatencyMs(preCheck.getLatencyMs());
+                chosen.setExitIp(preCheck.getExitIp());
+                chosen.setCountry(preCheck.getCountry());
+                chosen.setFailCount(0);
+                repository.updateTelemetrySync(
+                        chosen.getId(),
+                        preCheck.getLatencyMs(),
+                        preCheck.getExitIp(),
+                        preCheck.getCountry(),
+                        0
+                );
+            }
+
+            repository.markActiveProxySync(chosen.getId());
 
             try {
                 int localPort = localProxyServer.start(chosen);
@@ -267,38 +314,24 @@ public class ProxyVpnService extends VpnService
                 startTelemetryTicker();
 
                 repository.addLog(ProxyLogEntry.Level.SUCCESS,
-                        "Đã kết nối VPN Proxy cố định -> " + chosen.getAddressDisplay() + " (cổng cục bộ :" + localPort + ")");
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_connected,
+                                chosen.getAddressDisplay(), localPort));
                 if (activeVpnTimerMinutes > 0) {
                     repository.addLog(ProxyLogEntry.Level.INFO,
-                            getString(R.string.log_vpn_timer_set, formatTimerMinutes(activeVpnTimerMinutes)));
+                            ProxyLogFormatter.getString(this, R.string.log_vpn_timer_set,
+                                    formatTimerMinutes(activeVpnTimerMinutes)));
                 }
                 ProxyNotificationManager.notifyVpnConnected(this, chosen, activeVpnTimerMinutes);
-
-                // Refresh exit IP and latency once on initial connect without changing proxy
-                ProxyTester.TestResult test = ProxyTester.testProxy(chosen, 6000);
-                if (!isRunning.get()) {
-                    return;
-                }
-                if (test.isSuccess()) {
-                    lastUpstreamSuccessMs.set(System.currentTimeMillis());
-                    chosen.setLatencyMs(test.getLatencyMs());
-                    chosen.setExitIp(test.getExitIp());
-                    chosen.setCountry(test.getCountry());
-                    repository.updateTelemetrySync(chosen.getId(), test.getLatencyMs(), test.getExitIp(), test.getCountry(), 0);
-                } else if (isAutoStopEnabled()) {
-                    String reason = test.getErrorMessage() != null && !test.getErrorMessage().isEmpty()
-                            ? test.getErrorMessage()
-                            : getString(R.string.status_error);
-                    autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
-                            chosen.getAddressDisplay(), reason));
-                    return;
-                }
+                lastUpstreamSuccessMs.set(System.currentTimeMillis());
 
                 publishStatus(ConnectionStatus.State.CONNECTED, "");
                 updateNotification();
             } catch (Exception e) {
-                String msg = e.getMessage() != null ? e.getMessage() : "Không thể khởi tạo giao diện VPN";
-                repository.addLog(ProxyLogEntry.Level.ERROR, "Lỗi VPN: " + msg);
+                String msg = e.getMessage() != null
+                        ? e.getMessage()
+                        : ProxyLogFormatter.getString(this, R.string.log_vpn_interface_failed);
+                repository.addLog(ProxyLogEntry.Level.ERROR,
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_error, msg));
                 stopTunnelAndService(msg);
             }
         });
@@ -321,6 +354,12 @@ public class ProxyVpnService extends VpnService
         builder.addRoute("0.0.0.0", 0);
         builder.setMtu(1500);
         builder.allowBypass();
+        for (String dnsServer : proxy.getResolvedDnsServers()) {
+            try {
+                builder.addDnsServer(dnsServer);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
         applyPerAppRules(builder);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -341,7 +380,7 @@ public class ProxyVpnService extends VpnService
 
         tunInterface = builder.establish();
         if (tunInterface == null) {
-            throw new IOException("Quyền VPN chưa được cấp hoặc bị hệ thống từ chối");
+            throw new IOException(ProxyLogFormatter.getString(this, R.string.msg_vpn_permission_denied));
         }
 
         tunDrainThread = new Thread(() -> {
@@ -370,7 +409,8 @@ public class ProxyVpnService extends VpnService
                     int minutes = activeVpnTimerMinutes;
                     String durationLabel = formatTimerMinutes(minutes);
                     ProxyNotificationManager.notifyTimerExpired(this, durationLabel);
-                    stopTunnelAndService("", getString(R.string.log_vpn_timer_expired, durationLabel), false);
+                    stopTunnelAndService("",
+                            ProxyLogFormatter.getString(this, R.string.log_vpn_timer_expired, durationLabel), false);
                     return;
                 }
                 publishStatus(ConnectionStatus.State.CONNECTED, "");
@@ -392,6 +432,41 @@ public class ProxyVpnService extends VpnService
                 startTunnelAsync(targetId);
                 return;
             }
+            long nowMs = System.currentTimeMillis();
+            boolean freshlyVerifiedHealthy = target.getLatencyMs() > 0
+                    && target.getLastCheckedAt() > 0L
+                    && (nowMs - target.getLastCheckedAt()) <= 5_000L;
+            if (!freshlyVerifiedHealthy) {
+                ProxyTester.TestResult check = ProxyTester.testProxy(target, 6000);
+                if (!check.isSuccess()) {
+                    String reason = !check.getErrorMessage().isEmpty()
+                            ? check.getErrorMessage()
+                            : ProxyLogFormatter.getString(this, R.string.status_error);
+                    repository.updateTelemetrySync(
+                            target.getId(),
+                            ProxyConfig.LATENCY_FAILED,
+                            target.getExitIp(),
+                            target.getCountry(),
+                            target.getFailCount() + 1
+                    );
+                    repository.addLog(ProxyLogEntry.Level.ERROR,
+                            ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
+                                    target.getAddressDisplay(), reason));
+                    return;
+                }
+                target.setLatencyMs(check.getLatencyMs());
+                target.setExitIp(check.getExitIp());
+                target.setCountry(check.getCountry());
+                target.setFailCount(0);
+                repository.updateTelemetrySync(
+                        target.getId(),
+                        check.getLatencyMs(),
+                        check.getExitIp(),
+                        check.getCountry(),
+                        0
+                );
+            }
+            if (!isRunning.get()) return;
             applyManualProxyChange(target);
         });
     }
@@ -476,7 +551,7 @@ public class ProxyVpnService extends VpnService
                 establishVpnInterface(activeProxy, localProxyServer.getLocalPort());
             } catch (IOException e) {
                 repository.addLog(ProxyLogEntry.Level.ERROR,
-                        "Không thể cập nhật tường lửa / định tuyến VPN: " + e.getMessage());
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_policy_update_failed, e.getMessage()));
             }
         });
     }
@@ -487,13 +562,14 @@ public class ProxyVpnService extends VpnService
             try {
                 establishVpnInterface(activeProxy, localProxyServer.getLocalPort());
                 AppProxyRule rule = repository.getAppProxyRuleSync();
+                int count = rule.getSelectedPackages().size();
                 String msg = rule.getMode() == AppProxyRule.Mode.ALLOW_SELECTED
-                        ? "Đã áp dụng quy tắc: Chỉ cho phép " + rule.getSelectedPackages().size() + " ứng dụng qua Proxy"
-                        : "Đã áp dụng quy tắc: Chặn " + rule.getSelectedPackages().size() + " ứng dụng không dùng Proxy";
+                        ? ProxyLogFormatter.getString(this, R.string.log_app_rule_allow_applied, count)
+                        : ProxyLogFormatter.getString(this, R.string.log_app_rule_block_applied, count);
                 repository.addLog(ProxyLogEntry.Level.INFO, msg);
             } catch (IOException e) {
                 repository.addLog(ProxyLogEntry.Level.ERROR,
-                        "Không thể cập nhật quy tắc ứng dụng VPN: " + e.getMessage());
+                        ProxyLogFormatter.getString(this, R.string.log_app_rule_update_failed, e.getMessage()));
             }
         });
     }
@@ -506,7 +582,7 @@ public class ProxyVpnService extends VpnService
         localProxyServer.setActiveProxy(nextProxy);
         repository.markActiveProxySync(nextProxy.getId());
         repository.addLog(ProxyLogEntry.Level.SUCCESS,
-                "Người dùng đã đổi Proxy -> " + nextProxy.getAddressDisplay());
+                ProxyLogFormatter.getString(this, R.string.log_vpn_proxy_switched, nextProxy.getAddressDisplay()));
         publishStatus(ConnectionStatus.State.CONNECTED, "");
         updateNotification();
     }
@@ -560,7 +636,8 @@ public class ProxyVpnService extends VpnService
                 ProxyNotificationManager.notifyVpnDisconnected(this, customDisconnectLog, true);
             }
         } else if (errorMsg == null || errorMsg.isEmpty()) {
-            repository.addLog(ProxyLogEntry.Level.INFO, "Đã ngắt kết nối VPN Proxy");
+            repository.addLog(ProxyLogEntry.Level.INFO,
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_disconnected));
             if (notifyDisconnectEvent) {
                 ProxyNotificationManager.notifyVpnDisconnected(this, null, false);
             }
@@ -632,7 +709,7 @@ public class ProxyVpnService extends VpnService
         ScheduledExecutorService exec = scheduler;
         if (exec == null || exec.isShutdown()) {
             if (!hasActiveUnderlyingInternet() && isAutoStopEnabled()) {
-                autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+                autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_network_lost));
             }
             return;
         }
@@ -640,7 +717,7 @@ public class ProxyVpnService extends VpnService
             if (isRunning.get() && isAutoStopEnabled()
                     && availableUnderlyingNetworks.isEmpty()
                     && !hasActiveUnderlyingInternet()) {
-                autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+                autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_network_lost));
             }
         }, NETWORK_LOST_GRACE_MS, TimeUnit.MILLISECONDS);
     }
@@ -678,7 +755,7 @@ public class ProxyVpnService extends VpnService
             return;
         }
         if (!hasActiveUnderlyingInternet()) {
-            autoStopOnDisconnect(getString(R.string.log_auto_stop_network_lost));
+            autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_network_lost));
             return;
         }
         long idleMs = System.currentTimeMillis() - lastUpstreamSuccessMs.get();
@@ -704,7 +781,7 @@ public class ProxyVpnService extends VpnService
                 } else if (healthProbeFailures.incrementAndGet() >= AUTO_STOP_CONSECUTIVE_FAILURES
                         && isRunning.get()
                         && isAutoStopEnabled()) {
-                    autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
+                    autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_proxy_lost,
                             proxy.getAddressDisplay(), "Timeout"));
                 }
             } finally {
@@ -791,7 +868,7 @@ public class ProxyVpnService extends VpnService
         long prev = lastFirewallBlockLogMs.get();
         if (now - prev >= 5_000L && lastFirewallBlockLogMs.compareAndSet(prev, now)) {
             repository.addLog(ProxyLogEntry.Level.WARN,
-                    getString(R.string.log_firewall_blocked_request, appOrRule, destination));
+                    ProxyLogFormatter.getString(this, R.string.log_firewall_blocked_request, appOrRule, destination));
         }
         ProxyNotificationManager.notifyFirewallBlocked(this, appOrRule, destination);
     }
@@ -813,7 +890,7 @@ public class ProxyVpnService extends VpnService
         if (isAutoStopEnabled()) {
             int failures = consecutiveUpstreamFailures.incrementAndGet();
             if (failures >= AUTO_STOP_CONSECUTIVE_FAILURES) {
-                autoStopOnDisconnect(getString(R.string.log_auto_stop_proxy_lost,
+                autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_proxy_lost,
                         activeProxy.getAddressDisplay(), reason));
                 return;
             }
@@ -823,7 +900,8 @@ public class ProxyVpnService extends VpnService
         long prev = lastFailureLogMs.get();
         if (now - prev >= FAILURE_LOG_THROTTLE_MS && lastFailureLogMs.compareAndSet(prev, now)) {
             repository.addLog(ProxyLogEntry.Level.WARN,
-                    "Proxy " + activeProxy.getAddressDisplay() + " gặp lỗi truyền tải (" + reason + ").");
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_upstream_failure,
+                            activeProxy.getAddressDisplay(), reason));
         }
     }
 
@@ -867,29 +945,19 @@ public class ProxyVpnService extends VpnService
             vpnTimerDeadlineMs = baseTimeMs + (minutes * 60_000L);
             if (logChange) {
                 repository.addLog(ProxyLogEntry.Level.INFO,
-                        getString(R.string.log_vpn_timer_set, formatTimerMinutes(minutes)));
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_timer_set, formatTimerMinutes(minutes)));
             }
         } else {
             vpnTimerDeadlineMs = 0L;
             if (logChange) {
-                repository.addLog(ProxyLogEntry.Level.INFO, getString(R.string.log_vpn_timer_always));
+                repository.addLog(ProxyLogEntry.Level.INFO,
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_timer_always));
             }
         }
     }
 
     private String formatTimerMinutes(int minutes) {
-        if (minutes <= 0) {
-            return getString(R.string.vpn_timer_always);
-        }
-        int hours = minutes / 60;
-        int remMinutes = minutes % 60;
-        if (hours > 0 && remMinutes > 0) {
-            return getString(R.string.vpn_timer_hours_minutes, hours, remMinutes);
-        }
-        if (hours > 0) {
-            return getString(R.string.vpn_timer_hours, hours);
-        }
-        return getString(R.string.vpn_timer_minutes, minutes);
+        return ProxyLogFormatter.formatTimerMinutes(this, minutes);
     }
 
     private void updateNotification() {

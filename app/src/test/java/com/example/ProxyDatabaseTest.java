@@ -70,4 +70,51 @@ public class ProxyDatabaseTest {
         assertEquals("default", db.getSetting("custom_key", "default"));
         db.close();
     }
+
+    @Test
+    public void protocolAuthAndDnsFields_persistAndReloadCorrectly() {
+        Context context = ApplicationProvider.getApplicationContext();
+        ProxyDatabaseHelper db = new ProxyDatabaseHelper(context);
+
+        ProxyConfig p = new ProxyConfig();
+        p.setName("Custom SOCKS5 TLS");
+        p.setProtocol(ProxyConfig.Protocol.SOCKS5_TLS);
+        p.setHost("198.51.100.77");
+        p.setPort(4433);
+        p.setAuthMethod(ProxyConfig.AuthMethod.NONE);
+        p.setUsername("");
+        p.setPassword("");
+        p.setDnsMode(ProxyConfig.DnsMode.CUSTOM);
+        p.setCustomDns("9.9.9.9");
+
+        long id = db.insertProxy(p);
+        assertTrue(id > 0);
+
+        ProxyConfig loaded = db.getProxyById(id);
+        assertNotNull(loaded);
+        assertEquals("Custom SOCKS5 TLS", loaded.getName());
+        assertEquals(ProxyConfig.Protocol.SOCKS5_TLS, loaded.getProtocol());
+        assertEquals(ProxyConfig.AuthMethod.NONE, loaded.getAuthMethod());
+        assertEquals(ProxyConfig.DnsMode.CUSTOM, loaded.getDnsMode());
+        assertEquals("9.9.9.9", loaded.getCustomDns());
+
+        loaded.setProtocol(ProxyConfig.Protocol.SOCKS5_UDP);
+        loaded.setAuthMethod(ProxyConfig.AuthMethod.USER_PASS);
+        loaded.setUsername("u1");
+        loaded.setPassword("p1");
+        loaded.setDnsMode(ProxyConfig.DnsMode.CLOUDFLARE);
+        loaded.setCustomDns("");
+        db.updateProxy(loaded);
+
+        ProxyConfig updated = db.getProxyById(id);
+        assertNotNull(updated);
+        assertEquals(ProxyConfig.Protocol.SOCKS5_UDP, updated.getProtocol());
+        assertEquals(ProxyConfig.AuthMethod.USER_PASS, updated.getAuthMethod());
+        assertEquals("u1", updated.getUsername());
+        assertEquals("p1", updated.getPassword());
+        assertEquals(ProxyConfig.DnsMode.CLOUDFLARE, updated.getDnsMode());
+
+        db.deleteProxy(id);
+        db.close();
+    }
 }

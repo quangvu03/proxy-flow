@@ -20,7 +20,7 @@
     <!-- Dashboard -->
     <string name="action_connect">Connect Proxy</string>
     <string name="action_disconnect">Disconnect</string>
-    <string name="action_test_active">Check IP &amp; Ping</string>
+    <string name="action_test_active">Speed Test</string>
     <string name="label_active_proxy">Selected Proxy</string>
     <string name="label_no_proxy_selected">No Proxy Selected</string>
     <string name="label_select_or_add_hint">Open the Proxies tab to add or choose an HTTP Proxy</string>
@@ -59,19 +59,40 @@
     <string name="desc_edit_proxy">Edit proxy</string>
     <string name="desc_delete_proxy">Delete proxy</string>
 
-    <!-- Add / Edit Proxy Sheet -->
-    <string name="title_add_proxy">Add HTTP Proxy</string>
+    <!-- Add / Edit Proxy Screen -->
+    <string name="title_add_proxy">Add Proxy</string>
     <string name="title_edit_proxy">Update Proxy</string>
-    <string name="hint_proxy_name">Label (e.g. US East 1)</string>
-    <string name="hint_proxy_host">HTTP Host / IP (e.g. 192.168.1.10)</string>
+    <string name="section_proxy_server">Proxy Server Details</string>
+    <string name="section_proxy_auth">Authentication &amp; DNS Resolution</string>
+    <string name="label_quick_paste_tip">Quick-paste ip:port:user:pass or socks5://user:pass@ip:port</string>
+    <string name="hint_proxy_name">Configuration Name (e.g. US East 1)</string>
+    <string name="label_proxy_protocol">Protocol</string>
+    <string name="hint_proxy_host">Server (e.g. 192.168.1.10)</string>
     <string name="hint_proxy_port">Port (e.g. 8080)</string>
-    <string name="hint_proxy_user">Username (optional)</string>
-    <string name="hint_proxy_pass">Password (optional)</string>
+    <string name="label_proxy_auth_method">Authentication Method</string>
+    <string name="auth_method_none">None</string>
+    <string name="auth_method_user_pass">Username / Password</string>
+    <string name="hint_proxy_user">Username</string>
+    <string name="hint_proxy_pass">Password</string>
+    <string name="label_dns_resolution">DNS Resolution</string>
+    <string name="dns_mode_proxy">Proxy</string>
+    <string name="dns_mode_cloudflare">Cloudflare DNS</string>
+    <string name="dns_mode_google">Google DNS</string>
+    <string name="dns_mode_custom">Custom</string>
+    <string name="hint_custom_dns">Custom DNS Server (e.g. 9.9.9.9)</string>
     <string name="action_paste_parse">Paste &amp; Auto-Parse (ip:port:user:pass)</string>
     <string name="action_save">Save Proxy</string>
     <string name="action_cancel">Cancel</string>
-    <string name="error_host_required">Please enter an HTTP Host / IP address</string>
-    <string name="error_port_invalid">Port must be between 1 and 65535</string>
+    <string name="error_host_required">Please enter a Server / IP address</string>
+    <string name="error_port_required">Please enter a port (1 – 65535)</string>
+    <string name="error_port_invalid">Port exceeds limit (allowed: 1 – 65535)</string>
+    <string name="error_username_required">Please enter username</string>
+    <string name="error_custom_dns_invalid">Please enter a valid DNS server IP (e.g. 1.1.1.1)</string>
+    <string name="action_test_connection">Test Connection</string>
+    <string name="msg_testing_connection">Testing connection to Proxy server…</string>
+    <string name="msg_test_connection_ok">Connection succeeded (%1$d ms)</string>
+    <string name="msg_test_connection_ok_ip">Connection succeeded • %1$d ms • IP: %2$s</string>
+    <string name="msg_test_connection_failed">Connection failed: %1$s</string>
     <string name="msg_clipboard_parsed">Auto-filled from Clipboard</string>
     <string name="msg_clipboard_invalid">Could not recognize ip:port[:user:pass] format</string>
 
@@ -378,5 +399,58 @@
     <string name="msg_google_config_missing">Google Sign-In Web Client ID is missing</string>
     <string name="msg_signed_out">Signed out of Google account</string>
 
-    <string name="label_app_version">Version: %1$s • Flutter 3.6.1</string>
+    <!-- Localized Proxy & VPN Connection Logs -->
+    <string name="log_proxy_updated">Updated Proxy %1$s</string>
+    <string name="log_proxy_added">Added new Proxy %1$s</string>
+    <string name="log_proxy_bulk_imported">Bulk imported %1$d Proxies</string>
+    <string name="log_proxy_deleted">Deleted Proxy %1$s</string>
+    <string name="log_proxy_test_ok">Test OK %1$s (%2$dms, IP: %3$s)</string>
+    <string name="log_proxy_test_failed">Test failed %1$s: %2$s</string>
+    <string name="log_proxy_batch_test_done">Finished testing %1$d Proxies (%2$d working)</string>
+    <string name="log_proxy_exported_txt">Exported %1$d Proxies to .txt file</string>
+    <string name="log_proxy_detail_failed">Detailed check %1$s: Unusable (%2$s)</string>
+    <string name="log_proxy_detail_ok">Check OK %1$s • Ping %2$dms • DL %3$.2f Mbps</string>
+    <string name="log_vpn_no_proxy">No Proxy available in the list to connect</string>
+    <string name="log_vpn_connected">Connected Fixed Proxy VPN -> %1$s (local port :%2$d)</string>
+    <string name="log_vpn_error">VPN Error: %1$s</string>
+    <string name="log_vpn_interface_failed">Failed to initialize VPN interface</string>
+    <string name="log_vpn_policy_update_failed">Failed to update VPN firewall / routing: %1$s</string>
+    <string name="log_app_rule_allow_applied">Applied rule: Allow only %1$d apps through Proxy</string>
+    <string name="log_app_rule_block_applied">Applied rule: Bypass %1$d apps from Proxy</string>
+    <string name="log_app_rule_update_failed">Failed to update VPN app rules: %1$s</string>
+    <string name="log_vpn_proxy_switched">Switched active Proxy -> %1$s</string>
+    <string name="log_vpn_disconnected">Disconnected Proxy VPN</string>
+    <string name="log_vpn_upstream_failure">Proxy %1$s encountered a transfer error (%2$s).</string>
+    <string name="log_firewall_rule_saved">Firewall: saved %1$s (%2$d apps)</string>
+
+    <!-- Network Speed Test (No Map) -->
+    <string name="title_network_speed">Network Speed Test</string>
+    <string name="subtitle_network_speed_proxy">Measuring via connected Proxy</string>
+    <string name="subtitle_network_speed_direct">Measuring on current device network</string>
+    <string name="label_speed_testing_now">Measuring Ping, Download, and Upload…</string>
+    <string name="label_speed_ready">Tap re-test to measure current network speed</string>
+    <string name="label_speed_completed_at">Updated at %1$s</string>
+    <string name="label_speed_jitter">Jitter</string>
+    <string name="label_speed_transferred">Sample data: Down %1$s • Up %2$s</string>
+    <string name="quality_fast">Fast &amp; Stable Connection</string>
+    <string name="quality_moderate">Moderate Speed</string>
+    <string name="quality_slow">Slow Speed / High Latency</string>
+    <string name="quality_error">Speed Test Failed</string>
+    <string name="section_connected_ip_info">Connected IP Information</string>
+    <string name="label_connection_route">Route</string>
+    <string name="label_connected_proxy_node">Proxy Server</string>
+    <string name="label_direct_no_proxy">Direct Network (VPN Off)</string>
+
+    <!-- Pre-connect Proxy Verification & Error Blocking -->
+    <string name="status_checking_proxy">Checking Proxy…</string>
+    <string name="title_proxy_error_blocked">Proxy Error — Cannot Connect</string>
+    <string name="msg_proxy_connect_blocked_error">Proxy %1$s failed check (%2$s), connection cancelled.</string>
+    <string name="action_inspect_detail">Inspect Details</string>
+    <string name="action_connect_checking">Checking…</string>
+    <string name="action_proxy_error_no_connect">Proxy Error</string>
+    <string name="filter_error">Error</string>
+    <string name="msg_batch_test_summary">Checked %1$d Proxies: %2$d working, %3$d failed (blocked)</string>
+    <string name="log_proxy_connect_refused">Refused connecting to faulty Proxy %1$s (%2$s)</string>
+
+    <string name="label_app_version">Version: %1$s • 100%% Java</string>
 </resources>

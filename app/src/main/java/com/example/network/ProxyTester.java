@@ -44,13 +44,16 @@ public final class ProxyTester {
     }
 
     public static TestResult testProxy(ProxyConfig proxy, int timeoutMs) {
-        if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0) {
+        if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0 || proxy.getPort() > 65535) {
             return new TestResult(false, -1, "", "", "Cấu hình Proxy không hợp lệ");
         }
 
+        if (proxy.isSocks5Protocol()) {
+            return testSocks5Proxy(proxy, timeoutMs);
+        }
+
         long startNs = System.nanoTime();
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+        try (Socket socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, timeoutMs)) {
             socket.setSoTimeout(timeoutMs);
 
             StringBuilder req = new StringBuilder();
@@ -93,6 +96,51 @@ public final class ProxyTester {
 
             long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
             if (statusCode >= 200 && statusCode < 300) {
+                try {
+                    JSONObject json = new JSONObject(body.toString().trim());
+                    String exitIp = json.optString("query", "");
+                    String country = json.optString("country", "");
+                    if (!exitIp.isEmpty()) {
+                        return new TestResult(true, elapsedMs, exitIp, country, "");
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            // Fallback to CONNECT test in case target HTTP endpoint is blocked or non-JSON
+            return testConnectTunnel(proxy, timeoutMs);
+        } catch (IOException e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối Proxy";
+            return new TestResult(false, -1, "", "", msg);
+        }
+    }
+
+    private static TestResult testSocks5Proxy(ProxyConfig proxy, int timeoutMs) {
+        long startNs = System.nanoTime();
+        try (Socket tunnel = UpstreamProxyConnector.openTunnel(proxy, "ip-api.com", 80, timeoutMs)) {
+            tunnel.setSoTimeout(timeoutMs);
+            String req = "GET /json?fields=status,country,query HTTP/1.1\r\n"
+                    + "Host: ip-api.com\r\n"
+                    + "User-Agent: ProxyFlow/1.0\r\n"
+                    + "Connection: close\r\n\r\n";
+            OutputStream out = tunnel.getOutputStream();
+            out.write(req.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(tunnel.getInputStream(), StandardCharsets.UTF_8));
+            String statusLine = reader.readLine();
+            long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+            if (statusLine != null && parseHttpStatusCode(statusLine) >= 200 && parseHttpStatusCode(statusLine) < 300) {
+                String line;
+                while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                    // Consume headers
+                }
+                StringBuilder body = new StringBuilder();
+                while ((line = reader.readLine()) != null) {
+                    body.append(line);
+                    if (body.length() > 8192) break;
+                }
                 String exitIp = "";
                 String country = "";
                 try {
@@ -103,19 +151,26 @@ public final class ProxyTester {
                 }
                 return new TestResult(true, elapsedMs, exitIp, country, "");
             }
-
-            // Fallback to CONNECT test in case target HTTP endpoint is blocked by proxy policy
-            return testConnectTunnel(proxy, timeoutMs);
+            return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+        } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+            return new TestResult(false, -1, "", "",
+                    authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
         } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối Proxy";
-            return new TestResult(false, -1, "", "", msg);
+            // Fallback CONNECT check to 1.1.1.1:443
+            long fallbackStart = System.nanoTime();
+            try (Socket ignored = UpstreamProxyConnector.openTunnel(proxy, "1.1.1.1", 443, timeoutMs)) {
+                long elapsedMs = Math.max(1L, (System.nanoTime() - fallbackStart) / 1_000_000L);
+                return new TestResult(true, elapsedMs, proxy.getHost(), "", "");
+            } catch (IOException fallbackErr) {
+                String msg = fallbackErr.getMessage() != null ? fallbackErr.getMessage() : "Không thể kết nối SOCKS5 Proxy";
+                return new TestResult(false, -1, "", "", msg);
+            }
         }
     }
 
     private static TestResult testConnectTunnel(ProxyConfig proxy, int timeoutMs) {
         long startNs = System.nanoTime();
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+        try (Socket socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, timeoutMs)) {
             socket.setSoTimeout(timeoutMs);
 
             StringBuilder req = new StringBuilder();

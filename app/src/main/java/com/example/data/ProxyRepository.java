@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import com.example.R;
 import com.example.model.AppProxyRule;
 import com.example.model.FirewallRule;
 import com.example.model.InstalledAppInfo;
@@ -39,10 +40,12 @@ public class ProxyRepository {
     private final MutableLiveData<ProxyConfig> selectedProxyLiveData = new MutableLiveData<>(null);
     private final MutableLiveData<List<ProxyLogEntry>> logsLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<Boolean> batchTestingLiveData = new MutableLiveData<>(false);
+    private final MutableLiveData<BatchTestSummary> batchTestSummaryLiveData = new MutableLiveData<>(null);
     private final MutableLiveData<AppProxyRule> appProxyRuleLiveData = new MutableLiveData<>();
     private final MutableLiveData<List<InstalledAppInfo>> installedAppsLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<Boolean> scanningAppsLiveData = new MutableLiveData<>(false);
     private final MutableLiveData<List<FirewallRule>> firewallRulesLiveData = new MutableLiveData<>(new ArrayList<>());
+    private final AtomicInteger batchEventSeq = new AtomicInteger(0);
 
     private ProxyRepository(Context context) {
         this.appContext = context.getApplicationContext();
@@ -79,6 +82,10 @@ public class ProxyRepository {
 
     public LiveData<Boolean> isBatchTesting() {
         return batchTestingLiveData;
+    }
+
+    public LiveData<BatchTestSummary> getBatchTestSummary() {
+        return batchTestSummaryLiveData;
     }
 
     public LiveData<AppProxyRule> getAppProxyRule() {
@@ -281,14 +288,14 @@ public class ProxyRepository {
             if (proxy.getId() > 0) {
                 dbHelper.updateProxy(proxy);
                 dbHelper.insertLog(ProxyLogEntry.Level.INFO,
-                        "Đã cập nhật Proxy " + proxy.getAddressDisplay());
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_updated, proxy.getAddressDisplay()));
             } else {
                 long newId = dbHelper.insertProxy(proxy);
                 if (prefs.getActiveProxyId() <= 0) {
                     prefs.setActiveProxyId(newId);
                 }
                 dbHelper.insertLog(ProxyLogEntry.Level.INFO,
-                        "Đã thêm Proxy mới " + proxy.getAddressDisplay());
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_added, proxy.getAddressDisplay()));
             }
             refreshInternal();
             if (onComplete != null) {
@@ -315,7 +322,7 @@ public class ProxyRepository {
             }
             if (imported > 0) {
                 dbHelper.insertLog(ProxyLogEntry.Level.SUCCESS,
-                        "Nhập hàng loạt thành công " + imported + " Proxy");
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_bulk_imported, imported));
             }
             refreshInternal();
             if (callback != null) {
@@ -333,7 +340,7 @@ public class ProxyRepository {
             }
             if (existing != null) {
                 dbHelper.insertLog(ProxyLogEntry.Level.WARN,
-                        "Đã xóa Proxy " + existing.getAddressDisplay());
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_deleted, existing.getAddressDisplay()));
             }
             refreshInternal();
         });
@@ -375,8 +382,8 @@ public class ProxyRepository {
                         0
                 );
                 dbHelper.insertLog(ProxyLogEntry.Level.SUCCESS,
-                        "Test OK " + proxy.getAddressDisplay() + " (" + result.getLatencyMs()
-                                + "ms, IP: " + result.getExitIp() + ")");
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_test_ok,
+                                proxy.getAddressDisplay(), result.getLatencyMs(), result.getExitIp()));
             } else {
                 dbHelper.updateProxyTelemetry(
                         proxy.getId(),
@@ -387,7 +394,8 @@ public class ProxyRepository {
                         proxy.getFailCount() + 1
                 );
                 dbHelper.insertLog(ProxyLogEntry.Level.ERROR,
-                        "Test lỗi " + proxy.getAddressDisplay() + ": " + result.getErrorMessage());
+                        ProxyLogFormatter.getString(appContext, R.string.log_proxy_test_failed,
+                                proxy.getAddressDisplay(), result.getErrorMessage()));
             }
             refreshInternal();
             if (callback != null) {
@@ -434,8 +442,14 @@ public class ProxyRepository {
                 Thread.currentThread().interrupt();
             }
 
+            int total = all.size();
+            int ok = okCount.get();
+            int failed = Math.max(0, total - ok);
             dbHelper.insertLog(ProxyLogEntry.Level.INFO,
-                    "Hoàn tất kiểm tra " + all.size() + " Proxy (" + okCount.get() + " hoạt động)");
+                    ProxyLogFormatter.getString(appContext, R.string.log_proxy_batch_test_done,
+                            total, ok));
+            batchTestSummaryLiveData.postValue(
+                    new BatchTestSummary(batchEventSeq.incrementAndGet(), total, ok, failed));
             batchTestingLiveData.postValue(false);
             refreshInternal();
         });
@@ -512,5 +526,24 @@ public class ProxyRepository {
 
     public interface TestCallback {
         void onTested(ProxyTester.TestResult result);
+    }
+
+    public static final class BatchTestSummary {
+        private final int eventId;
+        private final int totalCount;
+        private final int workingCount;
+        private final int failedCount;
+
+        public BatchTestSummary(int eventId, int totalCount, int workingCount, int failedCount) {
+            this.eventId = eventId;
+            this.totalCount = totalCount;
+            this.workingCount = workingCount;
+            this.failedCount = failedCount;
+        }
+
+        public int getEventId() { return eventId; }
+        public int getTotalCount() { return totalCount; }
+        public int getWorkingCount() { return workingCount; }
+        public int getFailedCount() { return failedCount; }
     }
 }

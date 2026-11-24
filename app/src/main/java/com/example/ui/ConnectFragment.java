@@ -7,7 +7,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -97,7 +96,7 @@ public class ConnectFragment extends Fragment {
 
         View cardDiagnostics = view.findViewById(R.id.card_node_diagnostics);
         if (cardDiagnostics != null) {
-            cardDiagnostics.setOnClickListener(v -> openIpCheckScreen());
+            cardDiagnostics.setOnClickListener(v -> openIpCheckScreen(false));
         }
 
         btnToggleVpn.setOnClickListener(v -> {
@@ -106,32 +105,9 @@ public class ConnectFragment extends Fragment {
             }
         });
 
-        btnOpenIpMap.setOnClickListener(v -> openIpCheckScreen());
+        btnOpenIpMap.setOnClickListener(v -> openIpCheckScreen(false));
 
-        btnTestActive.setOnClickListener(v -> {
-            ProxyConfig target = (latestStatus != null && latestStatus.getActiveProxy() != null)
-                    ? latestStatus.getActiveProxy()
-                    : latestSelectedProxy;
-            if (target == null) {
-                Toast.makeText(requireContext(), R.string.msg_no_proxy_to_connect, Toast.LENGTH_SHORT).show();
-                return;
-            }
-            btnTestActive.setEnabled(false);
-            viewModel.testProxy(target, result -> {
-                if (isAdded()) {
-                    requireActivity().runOnUiThread(() -> {
-                        btnTestActive.setEnabled(true);
-                        if (result.isSuccess()) {
-                            Toast.makeText(requireContext(),
-                                    "Ping " + result.getLatencyMs() + "ms • IP: " + result.getExitIp(),
-                                    Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(requireContext(), result.getErrorMessage(), Toast.LENGTH_SHORT).show();
-                        }
-                    });
-                }
-            });
-        });
+        btnTestActive.setOnClickListener(v -> openNetworkSpeedScreen());
 
         btnGoToProxies.setOnClickListener(v -> {
             if (getActivity() instanceof HostActions) {
@@ -159,8 +135,14 @@ public class ConnectFragment extends Fragment {
         viewModel.getAppProxyRule().observe(getViewLifecycleOwner(), this::renderAppRuleSummary);
     }
 
-    private void openIpCheckScreen() {
-        startActivity(new Intent(requireContext(), IpCheckActivity.class));
+    private void openIpCheckScreen(boolean autoCheckCurrentIp) {
+        Intent intent = new Intent(requireContext(), IpCheckActivity.class);
+        intent.putExtra(IpCheckActivity.EXTRA_AUTO_CHECK_CURRENT_IP, autoCheckCurrentIp);
+        startActivity(intent);
+    }
+
+    private void openNetworkSpeedScreen() {
+        startActivity(new Intent(requireContext(), NetworkSpeedActivity.class));
     }
 
     private void renderStatus() {
@@ -176,6 +158,7 @@ public class ConnectFragment extends Fragment {
                 tvStatusBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_connected));
                 tvStatusBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_connected_bg)));
+                btnToggleVpn.setEnabled(true);
                 btnToggleVpn.setText(R.string.action_disconnect);
                 btnToggleVpn.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_error)));
@@ -184,11 +167,13 @@ public class ConnectFragment extends Fragment {
                 break;
 
             case CONNECTING:
-                tvStatusBadge.setText(R.string.status_connecting);
+                boolean isPreChecking = status.getLocalProxyPort() <= 0;
+                tvStatusBadge.setText(isPreChecking ? R.string.status_checking_proxy : R.string.status_connecting);
                 tvStatusBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_switching));
                 tvStatusBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_switching_bg)));
-                btnToggleVpn.setText(R.string.action_disconnect);
+                btnToggleVpn.setEnabled(!isPreChecking);
+                btnToggleVpn.setText(isPreChecking ? R.string.status_checking_proxy : R.string.action_disconnect);
                 break;
 
             case ERROR:
@@ -225,7 +210,7 @@ public class ConnectFragment extends Fragment {
 
         if (proxy != null) {
             tvActiveTitle.setText(proxy.getDisplayTitle());
-            tvActiveAddress.setText("http://" + proxy.getAddressDisplay());
+            tvActiveAddress.setText(proxy.getSchemePrefix() + proxy.getAddressDisplay());
             tvExitIpValue.setText(proxy.getExitIp().isEmpty() ? "—" : proxy.getExitIp());
             tvAuthValue.setText(proxy.hasAuth() ? proxy.getUsername() : getString(R.string.badge_auth_no));
 
@@ -258,6 +243,7 @@ public class ConnectFragment extends Fragment {
     }
 
     private void resetConnectButton() {
+        btnToggleVpn.setEnabled(true);
         btnToggleVpn.setText(R.string.action_connect);
         btnToggleVpn.setBackgroundTintList(ColorStateList.valueOf(0xFF14B8A6));
         btnToggleVpn.setTextColor(0xFF042F2E);

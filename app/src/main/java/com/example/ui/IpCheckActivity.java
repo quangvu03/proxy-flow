@@ -19,6 +19,8 @@ import com.google.android.material.appbar.MaterialToolbar;
  */
 public class IpCheckActivity extends AppCompatActivity {
 
+    public static final String EXTRA_AUTO_CHECK_CURRENT_IP = "extra_auto_check_current_ip";
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         EdgeToEdge.enable(this);
@@ -41,10 +43,14 @@ public class IpCheckActivity extends AppCompatActivity {
             return WindowInsetsCompat.CONSUMED;
         });
 
+        boolean autoCheckCurrentIp = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_AUTO_CHECK_CURRENT_IP, false);
+
         if (savedInstanceState == null) {
             getSupportFragmentManager()
                     .beginTransaction()
-                    .replace(R.id.ip_check_fragment_container, new IpCheckFragment())
+                    .replace(R.id.ip_check_fragment_container,
+                            IpCheckFragment.newInstance(autoCheckCurrentIp))
                     .commit();
         }
     }

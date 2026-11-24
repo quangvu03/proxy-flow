@@ -55,6 +55,9 @@ public final class MapHelper {
     private static final String PREF_CACHE_SCHEMA = "tile_cache_schema_version";
     private static final int CURRENT_CACHE_SCHEMA = 3;
 
+    public static final double DEFAULT_OVERVIEW_ZOOM = 5.5;
+    public static final double IP_LOCATION_FOCUS_ZOOM = 7.5;
+
     private static final double MIN_ZOOM = 2.5;
     private static final double MAX_ZOOM = 20.0;
     private static final long ZOOM_ANIM_DURATION_MS = 260L;

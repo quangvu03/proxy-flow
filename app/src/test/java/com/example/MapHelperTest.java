@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.graphics.Point;
+import android.os.Looper;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -17,7 +18,10 @@ import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+
+import java.time.Duration;
 
 @RunWith(RobolectricTestRunner.class)
 public class MapHelperTest {
@@ -64,5 +68,24 @@ public class MapHelperTest {
         assertTrue(hoangSa.y < daNang.y);
         assertTrue(truongSa.x > hcm.x);
         assertTrue(truongSa.y > hoangSa.y);
+    }
+
+    @Test
+    public void ipFocusZoom_isFourTimesOverviewZoom() {
+        double magnification = Math.pow(2.0, MapHelper.IP_LOCATION_FOCUS_ZOOM - MapHelper.DEFAULT_OVERVIEW_ZOOM);
+        assertEquals(4.0, magnification, 0.01);
+        assertTrue(MapHelper.IP_LOCATION_FOCUS_ZOOM < 10.0);
+
+        Context context = ApplicationProvider.getApplicationContext();
+        MapView mapView = new MapView(context);
+        MapHelper.configureMapView(context, mapView, MapHelper.DEFAULT_OVERVIEW_ZOOM);
+        mapView.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(840, android.view.View.MeasureSpec.EXACTLY)
+        );
+        mapView.layout(0, 0, 1080, 840);
+        MapHelper.focusOnPoint(mapView, new GeoPoint(21.0285, 105.8542), MapHelper.IP_LOCATION_FOCUS_ZOOM);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500));
+        assertEquals(MapHelper.IP_LOCATION_FOCUS_ZOOM, mapView.getZoomLevelDouble(), 0.25);
     }
 }

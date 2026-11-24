@@ -19,17 +19,21 @@ import java.util.List;
 public class ProxyDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "proxyflow.db";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     private static volatile ProxyDatabaseHelper instance;
 
     private static final String TABLE_PROXIES = "proxies";
     private static final String COL_ID = "id";
     private static final String COL_NAME = "name";
+    private static final String COL_PROTOCOL = "protocol";
     private static final String COL_HOST = "host";
     private static final String COL_PORT = "port";
+    private static final String COL_AUTH_METHOD = "auth_method";
     private static final String COL_USERNAME = "username";
     private static final String COL_PASSWORD = "password";
+    private static final String COL_DNS_MODE = "dns_mode";
+    private static final String COL_CUSTOM_DNS = "custom_dns";
     private static final String COL_ENABLED = "enabled";
     private static final String COL_LATENCY_MS = "latency_ms";
     private static final String COL_EXIT_IP = "exit_ip";
@@ -77,10 +81,14 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
         String createProxies = "CREATE TABLE " + TABLE_PROXIES + " ("
                 + COL_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + COL_NAME + " TEXT NOT NULL DEFAULT '', "
+                + COL_PROTOCOL + " TEXT NOT NULL DEFAULT 'HTTP', "
                 + COL_HOST + " TEXT NOT NULL, "
                 + COL_PORT + " INTEGER NOT NULL, "
+                + COL_AUTH_METHOD + " TEXT NOT NULL DEFAULT 'NONE', "
                 + COL_USERNAME + " TEXT NOT NULL DEFAULT '', "
                 + COL_PASSWORD + " TEXT NOT NULL DEFAULT '', "
+                + COL_DNS_MODE + " TEXT NOT NULL DEFAULT 'PROXY', "
+                + COL_CUSTOM_DNS + " TEXT NOT NULL DEFAULT '', "
                 + COL_ENABLED + " INTEGER NOT NULL DEFAULT 1, "
                 + COL_LATENCY_MS + " INTEGER NOT NULL DEFAULT -1, "
                 + COL_EXIT_IP + " TEXT NOT NULL DEFAULT '', "
@@ -158,6 +166,30 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
         if (oldVersion < 3) {
             createSettingsTable(db);
             createFirewallRulesTableAndSeed(db);
+        }
+        if (oldVersion < 4) {
+            addColumnIfMissing(db, TABLE_PROXIES, COL_PROTOCOL, "TEXT NOT NULL DEFAULT 'HTTP'");
+            addColumnIfMissing(db, TABLE_PROXIES, COL_AUTH_METHOD, "TEXT NOT NULL DEFAULT 'NONE'");
+            addColumnIfMissing(db, TABLE_PROXIES, COL_DNS_MODE, "TEXT NOT NULL DEFAULT 'PROXY'");
+            addColumnIfMissing(db, TABLE_PROXIES, COL_CUSTOM_DNS, "TEXT NOT NULL DEFAULT ''");
+            db.execSQL("UPDATE " + TABLE_PROXIES + " SET " + COL_AUTH_METHOD + " = 'USER_PASS' WHERE "
+                    + COL_USERNAME + " IS NOT NULL AND " + COL_USERNAME + " != ''");
+        }
+    }
+
+    private void addColumnIfMissing(SQLiteDatabase db, String table, String column, String definition) {
+        boolean exists = false;
+        try (Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            int nameIdx = c.getColumnIndex("name");
+            while (c.moveToNext()) {
+                if (nameIdx >= 0 && column.equalsIgnoreCase(c.getString(nameIdx))) {
+                    exists = true;
+                    break;
+                }
+            }
+        }
+        if (!exists) {
+            db.execSQL("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
         }
     }
 
@@ -380,10 +412,14 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     private ContentValues toContentValues(ProxyConfig proxy) {
         ContentValues cv = new ContentValues();
         cv.put(COL_NAME, proxy.getName());
+        cv.put(COL_PROTOCOL, proxy.getProtocol().name());
         cv.put(COL_HOST, proxy.getHost());
         cv.put(COL_PORT, proxy.getPort());
+        cv.put(COL_AUTH_METHOD, proxy.getAuthMethod().name());
         cv.put(COL_USERNAME, proxy.getUsername());
         cv.put(COL_PASSWORD, proxy.getPassword());
+        cv.put(COL_DNS_MODE, proxy.getDnsMode().name());
+        cv.put(COL_CUSTOM_DNS, proxy.getCustomDns());
         cv.put(COL_ENABLED, proxy.isEnabled() ? 1 : 0);
         cv.put(COL_LATENCY_MS, proxy.getLatencyMs());
         cv.put(COL_EXIT_IP, proxy.getExitIp());
@@ -395,13 +431,34 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     }
 
     private ProxyConfig fromCursor(Cursor c) {
+        int idxProto = c.getColumnIndex(COL_PROTOCOL);
+        int idxAuth = c.getColumnIndex(COL_AUTH_METHOD);
+        int idxDnsMode = c.getColumnIndex(COL_DNS_MODE);
+        int idxCustomDns = c.getColumnIndex(COL_CUSTOM_DNS);
+
+        String username = c.getString(c.getColumnIndexOrThrow(COL_USERNAME));
+        ProxyConfig.Protocol protocol = idxProto >= 0
+                ? ProxyConfig.Protocol.fromString(c.getString(idxProto))
+                : ProxyConfig.Protocol.HTTP;
+        ProxyConfig.AuthMethod authMethod = idxAuth >= 0
+                ? ProxyConfig.AuthMethod.fromString(c.getString(idxAuth))
+                : ((username != null && !username.isEmpty()) ? ProxyConfig.AuthMethod.USER_PASS : ProxyConfig.AuthMethod.NONE);
+        ProxyConfig.DnsMode dnsMode = idxDnsMode >= 0
+                ? ProxyConfig.DnsMode.fromString(c.getString(idxDnsMode))
+                : ProxyConfig.DnsMode.PROXY;
+        String customDns = idxCustomDns >= 0 ? c.getString(idxCustomDns) : "";
+
         return new ProxyConfig(
                 c.getLong(c.getColumnIndexOrThrow(COL_ID)),
                 c.getString(c.getColumnIndexOrThrow(COL_NAME)),
+                protocol,
                 c.getString(c.getColumnIndexOrThrow(COL_HOST)),
                 c.getInt(c.getColumnIndexOrThrow(COL_PORT)),
-                c.getString(c.getColumnIndexOrThrow(COL_USERNAME)),
+                authMethod,
+                username,
                 c.getString(c.getColumnIndexOrThrow(COL_PASSWORD)),
+                dnsMode,
+                customDns,
                 c.getInt(c.getColumnIndexOrThrow(COL_ENABLED)) == 1,
                 c.getLong(c.getColumnIndexOrThrow(COL_LATENCY_MS)),
                 c.getString(c.getColumnIndexOrThrow(COL_EXIT_IP)),

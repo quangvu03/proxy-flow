@@ -59,6 +59,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final AtomicBoolean fullTestRunning = new AtomicBoolean(false);
     private final AtomicBoolean speedTestRunning = new AtomicBoolean(false);
+    private volatile boolean lastDiagnosticUsable = false;
 
     private MaterialCardView cardVerdict;
     private ImageView ivVerdictIcon;
@@ -139,7 +140,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
         mapView = findViewById(R.id.map_detail_proxy);
         ImageButton btnDetailZoomIn = findViewById(R.id.btn_detail_zoom_in);
         ImageButton btnDetailZoomOut = findViewById(R.id.btn_detail_zoom_out);
-        MapHelper.configureMapView(this, mapView, 5.2);
+        MapHelper.configureMapView(this, mapView, MapHelper.DEFAULT_OVERVIEW_ZOOM);
         MapHelper.attachZoomControls(mapView, btnDetailZoomIn, btnDetailZoomOut);
 
         long proxyId = getIntent().getLongExtra(EXTRA_PROXY_ID, -1L);
@@ -152,7 +153,13 @@ public class ProxyDetailActivity extends AppCompatActivity {
         btnRunSpeedTest.setOnClickListener(v -> runSpeedTestOnly());
         btnCopyIpv4.setOnClickListener(v -> copyText(tvDetailIpv4.getText().toString()));
         btnCopyIpv6.setOnClickListener(v -> copyText(tvDetailIpv6.getText().toString()));
+        btnConnectThis.setEnabled(false);
+        btnConnectThis.setText(R.string.action_connect_checking);
         btnConnectThis.setOnClickListener(v -> {
+            if (!lastDiagnosticUsable) {
+                Toast.makeText(this, R.string.verdict_unusable_sub, Toast.LENGTH_SHORT).show();
+                return;
+            }
             Intent res = new Intent();
             res.putExtra(EXTRA_CONNECT_PROXY_ID, proxyId);
             setResult(RESULT_OK, res);
@@ -168,7 +175,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
             proxy = loaded;
             runOnUiThread(() -> {
                 toolbar.setTitle(proxy.getDisplayTitle());
-                toolbar.setSubtitle("http://" + proxy.getAddressDisplay());
+                toolbar.setSubtitle(proxy.getSchemePrefix() + proxy.getAddressDisplay());
                 tvDiagTcpLabel.setText(getString(R.string.diag_tcp_connect, proxy.getAddressDisplay()));
                 runFullInspection();
             });
@@ -181,9 +188,12 @@ public class ProxyDetailActivity extends AppCompatActivity {
         }
 
         // Reset UI to checking state
+        lastDiagnosticUsable = false;
         progressDetailAll.setVisibility(View.VISIBLE);
         btnRetestAll.setEnabled(false);
         btnRunSpeedTest.setEnabled(false);
+        btnConnectThis.setEnabled(false);
+        btnConnectThis.setText(R.string.action_connect_checking);
         tvVerdictTitle.setText(R.string.verdict_testing);
         tvVerdictSubtitle.setText(R.string.verdict_testing_sub);
         ivVerdictIcon.setImageResource(R.drawable.ic_speed);
@@ -211,7 +221,8 @@ public class ProxyDetailActivity extends AppCompatActivity {
                     repository.updateTelemetrySync(proxy.getId(), ProxyConfig.LATENCY_FAILED,
                             proxy.getExitIp(), proxy.getCountry(), proxy.getFailCount() + 1);
                     repository.addLog(ProxyLogEntry.Level.ERROR,
-                            "Kiểm tra chi tiết " + proxy.getAddressDisplay() + ": Không xài được (" + diag.getErrorMessage() + ")");
+                            com.example.data.ProxyLogFormatter.getString(this, R.string.log_proxy_detail_failed,
+                                    proxy.getAddressDisplay(), diag.getErrorMessage()));
                     runOnUiThread(() -> {
                         progressSpeedTest.setVisibility(View.GONE);
                         tvSpeedStatus.setText(R.string.label_speed_failed);
@@ -237,7 +248,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
                         0
                 );
                 repository.addLog(ProxyLogEntry.Level.SUCCESS,
-                        String.format(Locale.US, "Kiểm tra OK %s • Ping %dms • DL %.2f Mbps",
+                        com.example.data.ProxyLogFormatter.getString(this, R.string.log_proxy_detail_ok,
                                 proxy.getAddressDisplay(), finalLatency, speed.getDownloadMbps()));
 
                 if (!isFinishing() && !isDestroyed()) {
@@ -324,6 +335,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
     }
 
     private void renderVerdict(boolean usable, String note) {
+        lastDiagnosticUsable = usable;
         if (usable) {
             ivVerdictIcon.setImageResource(R.drawable.ic_check_circle);
             ivVerdictIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_connected));
@@ -331,6 +343,8 @@ public class ProxyDetailActivity extends AppCompatActivity {
             tvVerdictTitle.setTextColor(ContextCompat.getColor(this, R.color.status_connected));
             tvVerdictSubtitle.setText(note != null && !note.isEmpty() ? note : getString(R.string.verdict_usable_sub));
             cardVerdict.setStrokeColor(ContextCompat.getColor(this, R.color.status_connected));
+            btnConnectThis.setEnabled(true);
+            btnConnectThis.setText(R.string.action_connect_this_proxy);
         } else {
             ivVerdictIcon.setImageResource(R.drawable.ic_error_circle);
             ivVerdictIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
@@ -338,6 +352,8 @@ public class ProxyDetailActivity extends AppCompatActivity {
             tvVerdictTitle.setTextColor(ContextCompat.getColor(this, R.color.status_error));
             tvVerdictSubtitle.setText(note != null && !note.isEmpty() ? note : getString(R.string.verdict_unusable_sub));
             cardVerdict.setStrokeColor(ContextCompat.getColor(this, R.color.status_error));
+            btnConnectThis.setEnabled(false);
+            btnConnectThis.setText(R.string.action_proxy_error_no_connect);
         }
     }
 
@@ -385,7 +401,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
             marker.setSnippet(ip.getLocationSummary());
             mapView.getOverlays().add(marker);
             marker.showInfoWindow();
-            MapHelper.focusOnPoint(mapView, pt, 14.5);
+            MapHelper.focusOnPoint(mapView, pt, MapHelper.IP_LOCATION_FOCUS_ZOOM);
         } else {
             mapView.invalidate();
         }

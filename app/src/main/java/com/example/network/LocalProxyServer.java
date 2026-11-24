@@ -176,60 +176,86 @@ public class LocalProxyServer {
                 }
             }
 
-            upstream = new Socket();
-            upstream.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), UPSTREAM_CONNECT_TIMEOUT_MS);
-            upstream.setSoTimeout(30000);
-
-            StringBuilder rebuilt = new StringBuilder();
-            rebuilt.append(requestLine).append("\r\n");
-            for (int i = 1; i < lines.length; i++) {
-                String line = lines[i];
-                if (line.isEmpty()) continue;
-                String lower = line.toLowerCase(Locale.ROOT);
-                if (lower.startsWith("proxy-authorization:") || lower.startsWith("proxy-connection:")) {
-                    continue;
-                }
-                rebuilt.append(line).append("\r\n");
-            }
-            if (proxy.hasAuth()) {
-                rebuilt.append("Proxy-Authorization: Basic ")
-                        .append(proxy.getBasicAuthToken())
-                        .append("\r\n");
-            }
-            rebuilt.append("Proxy-Connection: Keep-Alive\r\n");
-            rebuilt.append("\r\n");
-
-            byte[] outHeader = rebuilt.toString().getBytes(StandardCharsets.ISO_8859_1);
-            OutputStream upstreamOut = upstream.getOutputStream();
-            InputStream upstreamIn = upstream.getInputStream();
-
-            upstreamOut.write(outHeader);
-            upstreamOut.flush();
-            bytesOut.addAndGet(outHeader.length);
-
-            if (isConnect) {
-                byte[] upstreamRespHeaders = readHttpHeaderBlock(upstreamIn);
-                if (upstreamRespHeaders == null || upstreamRespHeaders.length == 0) {
-                    notifyFailure(proxy.getId(), "Upstream đóng kết nối khi CONNECT");
-                    sendBadGateway(clientOut, "Upstream closed connection");
+            if (proxy.isSocks5Protocol()) {
+                if (endpoint == null || endpoint.host.isEmpty()) {
+                    sendBadGateway(clientOut, "Target host missing for SOCKS5 tunnel");
                     return;
                 }
-                String respStr = new String(upstreamRespHeaders, StandardCharsets.ISO_8859_1);
-                String statusLine = respStr.split("\r\n", 2)[0];
-                int statusCode = ProxyTester.parseHttpStatusCode(statusLine);
-                clientOut.write(upstreamRespHeaders);
-                clientOut.flush();
-                bytesIn.addAndGet(upstreamRespHeaders.length);
+                upstream = UpstreamProxyConnector.openTunnel(
+                        proxy, endpoint.host, endpoint.port, UPSTREAM_CONNECT_TIMEOUT_MS);
+                upstream.setSoTimeout(30000);
+                OutputStream upstreamOut = upstream.getOutputStream();
+                InputStream upstreamIn = upstream.getInputStream();
 
-                if (statusCode >= 200 && statusCode < 300) {
-                    notifySuccess(proxy.getId());
-                    relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut);
-                } else if (statusCode == 407) {
-                    notifyFailure(proxy.getId(), "Lỗi xác thực Proxy (407)");
+                if (isConnect) {
+                    byte[] established = "HTTP/1.1 200 Connection Established\r\n\r\n"
+                            .getBytes(StandardCharsets.ISO_8859_1);
+                    clientOut.write(established);
+                    clientOut.flush();
+                    bytesIn.addAndGet(established.length);
+                } else {
+                    byte[] directHttpHeaders = rebuildDirectHttpHeadersForTunnel(requestLine, lines);
+                    upstreamOut.write(directHttpHeaders);
+                    upstreamOut.flush();
+                    bytesOut.addAndGet(directHttpHeaders.length);
                 }
-            } else {
                 notifySuccess(proxy.getId());
                 relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut);
+            } else {
+                upstream = UpstreamProxyConnector.openRawUpstreamSocket(proxy, UPSTREAM_CONNECT_TIMEOUT_MS);
+                upstream.setSoTimeout(30000);
+
+                StringBuilder rebuilt = new StringBuilder();
+                rebuilt.append(requestLine).append("\r\n");
+                for (int i = 1; i < lines.length; i++) {
+                    String line = lines[i];
+                    if (line.isEmpty()) continue;
+                    String lower = line.toLowerCase(Locale.ROOT);
+                    if (lower.startsWith("proxy-authorization:") || lower.startsWith("proxy-connection:")) {
+                        continue;
+                    }
+                    rebuilt.append(line).append("\r\n");
+                }
+                if (proxy.hasAuth()) {
+                    rebuilt.append("Proxy-Authorization: Basic ")
+                            .append(proxy.getBasicAuthToken())
+                            .append("\r\n");
+                }
+                rebuilt.append("Proxy-Connection: Keep-Alive\r\n");
+                rebuilt.append("\r\n");
+
+                byte[] outHeader = rebuilt.toString().getBytes(StandardCharsets.ISO_8859_1);
+                OutputStream upstreamOut = upstream.getOutputStream();
+                InputStream upstreamIn = upstream.getInputStream();
+
+                upstreamOut.write(outHeader);
+                upstreamOut.flush();
+                bytesOut.addAndGet(outHeader.length);
+
+                if (isConnect) {
+                    byte[] upstreamRespHeaders = readHttpHeaderBlock(upstreamIn);
+                    if (upstreamRespHeaders == null || upstreamRespHeaders.length == 0) {
+                        notifyFailure(proxy.getId(), "Upstream đóng kết nối khi CONNECT");
+                        sendBadGateway(clientOut, "Upstream closed connection");
+                        return;
+                    }
+                    String respStr = new String(upstreamRespHeaders, StandardCharsets.ISO_8859_1);
+                    String statusLine = respStr.split("\r\n", 2)[0];
+                    int statusCode = ProxyTester.parseHttpStatusCode(statusLine);
+                    clientOut.write(upstreamRespHeaders);
+                    clientOut.flush();
+                    bytesIn.addAndGet(upstreamRespHeaders.length);
+
+                    if (statusCode >= 200 && statusCode < 300) {
+                        notifySuccess(proxy.getId());
+                        relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut);
+                    } else if (statusCode == 407) {
+                        notifyFailure(proxy.getId(), "Lỗi xác thực Proxy (407)");
+                    }
+                } else {
+                    notifySuccess(proxy.getId());
+                    relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut);
+                }
             }
         } catch (IOException e) {
             ProxyConfig current = activeProxyRef.get();
@@ -241,6 +267,33 @@ public class LocalProxyServer {
             closeQuietly(upstream);
             closeQuietly(client);
         }
+    }
+
+    private static byte[] rebuildDirectHttpHeadersForTunnel(String requestLine, String[] lines) {
+        String[] parts = requestLine.split(" ", 3);
+        String rebuiltFirstLine = requestLine;
+        if (parts.length == 3) {
+            String target = parts[1];
+            if (target.startsWith("http://") || target.startsWith("https://")) {
+                String noScheme = target.substring(target.indexOf("://") + 3);
+                int slashIdx = noScheme.indexOf('/');
+                String path = slashIdx >= 0 ? noScheme.substring(slashIdx) : "/";
+                rebuiltFirstLine = parts[0] + " " + path + " " + parts[2];
+            }
+        }
+        StringBuilder rebuilt = new StringBuilder();
+        rebuilt.append(rebuiltFirstLine).append("\r\n");
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.isEmpty()) continue;
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("proxy-authorization:") || lower.startsWith("proxy-connection:")) {
+                continue;
+            }
+            rebuilt.append(line).append("\r\n");
+        }
+        rebuilt.append("Connection: keep-alive\r\n\r\n");
+        return rebuilt.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
 
     private void relayBidirectional(Socket client, Socket upstream,

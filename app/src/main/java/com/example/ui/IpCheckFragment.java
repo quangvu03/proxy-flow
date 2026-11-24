@@ -43,6 +43,16 @@ import java.util.Locale;
  */
 public class IpCheckFragment extends Fragment {
 
+    public static final String ARG_AUTO_CHECK_CURRENT_IP = "arg_auto_check_current_ip";
+
+    public static IpCheckFragment newInstance(boolean autoCheckCurrentIp) {
+        IpCheckFragment fragment = new IpCheckFragment();
+        Bundle args = new Bundle();
+        args.putBoolean(ARG_AUTO_CHECK_CURRENT_IP, autoCheckCurrentIp);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     private ProxyViewModel viewModel;
 
     private MapView mapView;
@@ -162,13 +172,16 @@ public class IpCheckFragment extends Fragment {
             }
         });
 
-        if (viewModel.getIpComparison().getValue() == null) {
+        boolean autoCheckCurrentIp = getArguments() != null
+                && getArguments().getBoolean(ARG_AUTO_CHECK_CURRENT_IP, false);
+        if ((autoCheckCurrentIp && savedInstanceState == null)
+                || viewModel.getIpComparison().getValue() == null) {
             viewModel.refreshIpComparison();
         }
     }
 
     private void setupMapView() {
-        MapHelper.configureMapView(requireContext(), mapView, 5.5);
+        MapHelper.configureMapView(requireContext(), mapView, MapHelper.DEFAULT_OVERVIEW_ZOOM);
     }
 
     private void renderResult(IpDetails.IpComparisonResult result) {
@@ -298,7 +311,7 @@ public class IpCheckFragment extends Fragment {
                 : null;
 
         if (focusMode == 1 && originPoint != null) {
-            MapHelper.focusOnPoint(mapView, originPoint, 14.5);
+            MapHelper.focusOnPoint(mapView, originPoint, MapHelper.IP_LOCATION_FOCUS_ZOOM);
             tvMapOverlayLocation.setText(getString(R.string.label_focus_origin_ip) + ": " + origin.getLocationSummary());
         } else if (focusMode == 2 && currentPoint != null && originPoint != null) {
             double north = Math.max(currentPoint.getLatitude(), originPoint.getLatitude()) + 2.0;
@@ -314,10 +327,10 @@ public class IpCheckFragment extends Fragment {
             MapHelper.focusOnBounds(mapView, box, 64);
             tvMapOverlayLocation.setText(origin.getCountry() + " → " + current.getCountry());
         } else if (currentPoint != null) {
-            MapHelper.focusOnPoint(mapView, currentPoint, 14.5);
+            MapHelper.focusOnPoint(mapView, currentPoint, MapHelper.IP_LOCATION_FOCUS_ZOOM);
             tvMapOverlayLocation.setText(current.getLocationSummary());
         } else if (originPoint != null) {
-            MapHelper.focusOnPoint(mapView, originPoint, 14.5);
+            MapHelper.focusOnPoint(mapView, originPoint, MapHelper.IP_LOCATION_FOCUS_ZOOM);
             tvMapOverlayLocation.setText(origin.getLocationSummary());
         }
     }

@@ -237,7 +237,9 @@ public class FirewallRulesActivity extends AppCompatActivity implements Firewall
 
                 repository.saveFirewallRule(toSave, () -> runOnUiThread(() -> {
                     repository.addLog(ProxyLogEntry.Level.INFO,
-                            "Tường lửa: đã lưu " + toSave.getName() + " (" + toSave.getBlockedPackages().size() + " ứng dụng)");
+                            com.example.data.ProxyLogFormatter.getString(
+                                    this, R.string.log_firewall_rule_saved,
+                                    toSave.getName(), toSave.getBlockedPackages().size()));
                     Toast.makeText(this, R.string.msg_firewall_rule_saved, Toast.LENGTH_SHORT).show();
                     reapplyVpnIfRunning();
                     dialog.dismiss();

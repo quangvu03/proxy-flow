@@ -30,6 +30,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.R;
 import com.example.data.ProxyFileHelper;
+import com.example.data.ProxyRepository;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -78,7 +79,8 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
 
     private List<ProxyConfig> allProxies = new ArrayList<>();
     private String searchQuery = "";
-    private int filterMode = 0; // 0 = all, 1 = online
+    private int filterMode = 0; // 0 = all, 1 = online, 2 = error
+    private int lastShownBatchEventId = 0;
 
     private final ActivityResultLauncher<Intent> detailLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -86,7 +88,6 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
                     long connectProxyId = result.getData().getLongExtra(
                             ProxyDetailActivity.EXTRA_CONNECT_PROXY_ID, -1L);
                     if (connectProxyId > 0) {
-                        viewModel.selectProxy(connectProxyId);
                         if (getActivity() instanceof ConnectFragment.HostActions) {
                             ((ConnectFragment.HostActions) getActivity()).onRequestConnectProxy(connectProxyId);
                         }
@@ -147,13 +148,15 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
         chipGroupFilter.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.contains(R.id.chip_filter_online)) {
                 filterMode = 1;
+            } else if (checkedIds.contains(R.id.chip_filter_error)) {
+                filterMode = 2;
             } else {
                 filterMode = 0;
             }
             applyFilter();
         });
 
-        fabAddProxy.setOnClickListener(v -> openAddEditSheet(null));
+        fabAddProxy.setOnClickListener(v -> openAddEditProxyScreen(-1L));
 
         btnTestAll.setOnClickListener(v -> {
             if (allProxies.isEmpty()) {
@@ -188,12 +191,31 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
             progressBatchTest.setVisibility(running ? View.VISIBLE : View.GONE);
             btnTestAll.setEnabled(!running);
         });
+
+        ProxyRepository.BatchTestSummary currentSummary = viewModel.getBatchTestSummary().getValue();
+        if (currentSummary != null) {
+            lastShownBatchEventId = currentSummary.getEventId();
+        }
+        viewModel.getBatchTestSummary().observe(getViewLifecycleOwner(), summary -> {
+            if (summary != null && summary.getEventId() > lastShownBatchEventId) {
+                lastShownBatchEventId = summary.getEventId();
+                Toast.makeText(
+                        requireContext(),
+                        getString(R.string.msg_batch_test_summary,
+                                summary.getTotalCount(), summary.getWorkingCount(), summary.getFailedCount()),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
     }
 
     private void applyFilter() {
         List<ProxyConfig> filtered = new ArrayList<>();
         for (ProxyConfig p : allProxies) {
             if (filterMode == 1 && p.getLatencyMs() <= 0) {
+                continue;
+            }
+            if (filterMode == 2 && p.getLatencyMs() != ProxyConfig.LATENCY_FAILED) {
                 continue;
             }
             if (!searchQuery.isEmpty()) {
@@ -221,16 +243,12 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
         }
     }
 
-    private void openAddEditSheet(@Nullable ProxyConfig existing) {
-        AddEditProxyBottomSheet sheet = AddEditProxyBottomSheet.newInstance(existing, proxy ->
-                viewModel.saveProxy(proxy, () -> {
-                    if (isAdded()) {
-                        requireActivity().runOnUiThread(() ->
-                                Toast.makeText(requireContext(), R.string.msg_proxy_saved, Toast.LENGTH_SHORT).show());
-                    }
-                })
-        );
-        sheet.show(getChildFragmentManager(), "AddEditProxyBottomSheet");
+    private void openAddEditProxyScreen(long proxyId) {
+        Intent intent = new Intent(requireContext(), AddEditProxyActivity.class);
+        if (proxyId > 0) {
+            intent.putExtra(AddEditProxyActivity.EXTRA_PROXY_ID, proxyId);
+        }
+        startActivity(intent);
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -405,7 +423,8 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
                     ProxyFileHelper.writeTextToStream(out, exportText);
                 }
                 viewModel.addLog(ProxyLogEntry.Level.INFO,
-                        "Đã xuất " + exportedCount + " Proxy ra file .txt");
+                        com.example.data.ProxyLogFormatter.getString(
+                                appCtx, R.string.log_proxy_exported_txt, exportedCount));
                 if (isAdded()) {
                     requireActivity().runOnUiThread(() ->
                             Toast.makeText(requireContext(),
@@ -447,7 +466,6 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
 
     @Override
     public void onConnectProxy(ProxyConfig proxy) {
-        viewModel.selectProxy(proxy.getId());
         if (getActivity() instanceof ConnectFragment.HostActions) {
             ((ConnectFragment.HostActions) getActivity()).onRequestConnectProxy(proxy.getId());
         }
@@ -462,7 +480,7 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
 
     @Override
     public void onEditProxy(ProxyConfig proxy) {
-        openAddEditSheet(proxy);
+        openAddEditProxyScreen(proxy.getId());
     }
 
     @Override

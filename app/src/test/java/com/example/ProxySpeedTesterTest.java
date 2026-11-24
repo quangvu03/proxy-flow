@@ -31,4 +31,16 @@ public class ProxySpeedTesterTest {
         assertFalse(result.isUsable());
         assertFalse(result.isTcpReachable());
     }
+
+    @Test
+    public void speedResult_preservesJitterAndRejectsInvalidProxy() {
+        ProxySpeedTester.SpeedResult directSample =
+                new ProxySpeedTester.SpeedResult(true, 28L, 6L, 42.5, 18.2, 524288L, 131072L, "");
+        assertEquals(6L, directSample.getJitterMs());
+        assertEquals(28L, directSample.getAvgPingMs());
+
+        ProxySpeedTester.SpeedResult invalidProxy = ProxySpeedTester.measureSpeed(null);
+        assertFalse(invalidProxy.isSuccess());
+        assertEquals(0L, invalidProxy.getJitterMs());
+    }
 }

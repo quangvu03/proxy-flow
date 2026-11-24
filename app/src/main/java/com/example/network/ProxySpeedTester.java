@@ -8,9 +8,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -64,6 +67,7 @@ public final class ProxySpeedTester {
     public static class SpeedResult {
         private final boolean success;
         private final long avgPingMs;
+        private final long jitterMs;
         private final double downloadMbps;
         private final double uploadMbps;
         private final long bytesDownloaded;
@@ -72,8 +76,14 @@ public final class ProxySpeedTester {
 
         public SpeedResult(boolean success, long avgPingMs, double downloadMbps, double uploadMbps,
                            long bytesDownloaded, long bytesUploaded, String errorMessage) {
+            this(success, avgPingMs, 0L, downloadMbps, uploadMbps, bytesDownloaded, bytesUploaded, errorMessage);
+        }
+
+        public SpeedResult(boolean success, long avgPingMs, long jitterMs, double downloadMbps, double uploadMbps,
+                           long bytesDownloaded, long bytesUploaded, String errorMessage) {
             this.success = success;
             this.avgPingMs = avgPingMs;
+            this.jitterMs = Math.max(0L, jitterMs);
             this.downloadMbps = downloadMbps;
             this.uploadMbps = uploadMbps;
             this.bytesDownloaded = bytesDownloaded;
@@ -83,6 +93,7 @@ public final class ProxySpeedTester {
 
         public boolean isSuccess() { return success; }
         public long getAvgPingMs() { return avgPingMs; }
+        public long getJitterMs() { return jitterMs; }
         public double getDownloadMbps() { return downloadMbps; }
         public double getUploadMbps() { return uploadMbps; }
         public long getBytesDownloaded() { return bytesDownloaded; }
@@ -97,9 +108,30 @@ public final class ProxySpeedTester {
         }
 
         long tcpStart = System.nanoTime();
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), CONNECT_TIMEOUT_MS);
-            long tcpMs = Math.max(1L, (System.nanoTime() - tcpStart) / 1_000_000L);
+        long tcpMs;
+        try (Socket tcpProbe = new Socket()) {
+            tcpProbe.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), CONNECT_TIMEOUT_MS);
+            tcpMs = Math.max(1L, (System.nanoTime() - tcpStart) / 1_000_000L);
+        } catch (IOException e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối TCP đến Proxy";
+            return new DiagnosticResult(false, -1, AuthState.UNKNOWN, false, false, msg);
+        }
+
+        if (proxy.isSocks5Protocol()) {
+            try (Socket ignored = UpstreamProxyConnector.openTunnel(
+                    proxy, "speed.cloudflare.com", 443, CONNECT_TIMEOUT_MS)) {
+                AuthState auth = proxy.hasAuth() ? AuthState.VALID : AuthState.NOT_REQUIRED;
+                return new DiagnosticResult(true, tcpMs, auth, true, true, "");
+            } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+                return new DiagnosticResult(true, tcpMs, AuthState.FAILED_407, false, false,
+                        authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
+            } catch (IOException e) {
+                String msg = e.getMessage() != null ? e.getMessage() : "Lỗi bắt tay SOCKS5";
+                return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false, msg);
+            }
+        }
+
+        try (Socket socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, CONNECT_TIMEOUT_MS)) {
             socket.setSoTimeout(CONNECT_TIMEOUT_MS);
 
             // Probe HTTPS CONNECT tunnel + Proxy-Authorization
@@ -143,57 +175,149 @@ public final class ProxySpeedTester {
             return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false,
                     "Proxy trả về mã lỗi HTTP " + code);
         } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối TCP đến Proxy";
-            return new DiagnosticResult(false, -1, AuthState.UNKNOWN, false, false, msg);
+            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối đến Proxy";
+            return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false, msg);
         }
     }
 
-    public static SpeedResult measureSpeed(ProxyConfig proxy) {
-        if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0) {
-            return new SpeedResult(false, -1, 0, 0, 0, 0, "Cấu hình Proxy không hợp lệ");
+    public static SpeedResult measureCurrentNetworkSpeed(ProxyConfig activeProxyIfVpnRunning) {
+        if (activeProxyIfVpnRunning != null) {
+            return measureSpeed(activeProxyIfVpnRunning);
         }
+        return measureDirectSpeed();
+    }
 
-        // 1. Measure average Ping (3 probes)
+    public static SpeedResult measureDirectSpeed() {
         long pingSum = 0;
+        long minPing = Long.MAX_VALUE;
+        long maxPing = 0;
         int pingCount = 0;
         for (int i = 0; i < 3; i++) {
             long start = System.nanoTime();
             try (Socket s = new Socket()) {
-                s.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), CONNECT_TIMEOUT_MS);
-                s.setSoTimeout(CONNECT_TIMEOUT_MS);
-                OutputStream out = s.getOutputStream();
-                StringBuilder req = new StringBuilder();
-                req.append("CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n");
-                if (proxy.hasAuth()) {
-                    req.append("Proxy-Authorization: Basic ").append(proxy.getBasicAuthToken()).append("\r\n");
+                s.connect(new InetSocketAddress("1.1.1.1", 443), CONNECT_TIMEOUT_MS);
+                long rtt = Math.max(1L, (System.nanoTime() - start) / 1_000_000L);
+                pingSum += rtt;
+                minPing = Math.min(minPing, rtt);
+                maxPing = Math.max(maxPing, rtt);
+                pingCount++;
+            } catch (IOException ignored) {
+            }
+        }
+
+        long avgPingMs = pingCount > 0 ? (pingSum / pingCount) : -1L;
+        long jitterMs = pingCount > 1 ? Math.max(0L, maxPing - minPing) : 0L;
+
+        long dlBytes = 0;
+        double dlMbps = 0.0;
+        HttpsURLConnection dlConn = null;
+        try {
+            URL url = new URL("https://speed.cloudflare.com/__down?bytes=" + DOWNLOAD_TARGET_BYTES);
+            dlConn = (HttpsURLConnection) url.openConnection(Proxy.NO_PROXY);
+            dlConn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            dlConn.setReadTimeout(IO_TIMEOUT_MS);
+            dlConn.setRequestProperty("User-Agent", "ProxyFlow/1.1");
+            if (dlConn.getResponseCode() >= 200 && dlConn.getResponseCode() < 300) {
+                try (InputStream in = dlConn.getInputStream()) {
+                    byte[] buf = new byte[16384];
+                    long startNs = System.nanoTime();
+                    int read;
+                    while ((read = in.read(buf)) != -1) {
+                        dlBytes += read;
+                    }
+                    long elapsedNs = Math.max(1_000_000L, System.nanoTime() - startNs);
+                    dlMbps = calculateMbps(dlBytes, elapsedNs);
                 }
-                req.append("\r\n");
-                out.write(req.toString().getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (IOException ignored) {
+        } finally {
+            if (dlConn != null) dlConn.disconnect();
+        }
+
+        long ulBytes = 0;
+        double ulMbps = 0.0;
+        HttpsURLConnection ulConn = null;
+        try {
+            URL url = new URL("https://speed.cloudflare.com/__up");
+            ulConn = (HttpsURLConnection) url.openConnection(Proxy.NO_PROXY);
+            ulConn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            ulConn.setReadTimeout(IO_TIMEOUT_MS);
+            ulConn.setRequestMethod("POST");
+            ulConn.setDoOutput(true);
+            ulConn.setFixedLengthStreamingMode(UPLOAD_TARGET_BYTES);
+            ulConn.setRequestProperty("User-Agent", "ProxyFlow/1.1");
+            ulConn.setRequestProperty("Content-Type", "application/octet-stream");
+
+            byte[] chunk = new byte[16384];
+            for (int i = 0; i < chunk.length; i++) {
+                chunk[i] = (byte) (i & 0xFF);
+            }
+
+            long startNs = System.nanoTime();
+            try (OutputStream out = ulConn.getOutputStream()) {
+                int remaining = UPLOAD_TARGET_BYTES;
+                while (remaining > 0) {
+                    int toWrite = Math.min(chunk.length, remaining);
+                    out.write(chunk, 0, toWrite);
+                    ulBytes += toWrite;
+                    remaining -= toWrite;
+                }
                 out.flush();
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(s.getInputStream(), StandardCharsets.ISO_8859_1));
-                String line = reader.readLine();
-                int code = ProxyTester.parseHttpStatusCode(line);
-                if (code == 407) {
-                    return new SpeedResult(false, -1, 0, 0, 0, 0, "Lỗi 407: Sai tài khoản/mật khẩu");
-                }
-                if (code >= 200 && code < 300) {
-                    pingSum += Math.max(1L, (System.nanoTime() - start) / 1_000_000L);
-                    pingCount++;
-                }
+            }
+            int code = ulConn.getResponseCode();
+            if (code >= 200 && code < 400) {
+                long elapsedNs = Math.max(1_000_000L, System.nanoTime() - startNs);
+                ulMbps = calculateMbps(ulBytes, elapsedNs);
+            } else {
+                ulBytes = 0;
+            }
+        } catch (IOException ignored) {
+            ulBytes = 0;
+        } finally {
+            if (ulConn != null) ulConn.disconnect();
+        }
+
+        boolean ok = pingCount > 0 || dlBytes > 0 || ulBytes > 0;
+        return new SpeedResult(ok, avgPingMs, jitterMs, dlMbps, ulMbps, dlBytes, ulBytes,
+                ok ? "" : "Không thể kết nối máy chủ đo tốc độ");
+    }
+
+    public static SpeedResult measureSpeed(ProxyConfig proxy) {
+        if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0) {
+            return new SpeedResult(false, -1, 0L, 0, 0, 0, 0, "Cấu hình Proxy không hợp lệ");
+        }
+
+        // 1. Measure average Ping (3 probes)
+        long pingSum = 0;
+        long minPing = Long.MAX_VALUE;
+        long maxPing = 0;
+        int pingCount = 0;
+        for (int i = 0; i < 3; i++) {
+            long start = System.nanoTime();
+            try (Socket ignored = UpstreamProxyConnector.openTunnel(proxy, "1.1.1.1", 443, CONNECT_TIMEOUT_MS)) {
+                long rtt = Math.max(1L, (System.nanoTime() - start) / 1_000_000L);
+                pingSum += rtt;
+                minPing = Math.min(minPing, rtt);
+                maxPing = Math.max(maxPing, rtt);
+                pingCount++;
+            } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+                return new SpeedResult(false, -1, 0L, 0, 0, 0, 0,
+                        authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực Proxy");
             } catch (IOException ignored) {
             }
         }
 
         if (pingCount == 0) {
-            return new SpeedResult(false, -1, 0, 0, 0, 0, "Không thể thiết lập phiên đo tốc độ qua Proxy");
+            return new SpeedResult(false, -1, 0L, 0, 0, 0, 0, "Không thể thiết lập phiên đo tốc độ qua Proxy");
         }
         long avgPingMs = pingSum / pingCount;
+        long jitterMs = pingCount > 1 ? Math.max(0L, maxPing - minPing) : 0L;
 
-        // 2. Measure Download Speed via HTTPS CONNECT (speed.cloudflare.com)
+        // 2. Measure Download Speed via Proxy tunnel (speed.cloudflare.com)
         long dlBytes = 0;
         double dlMbps = 0.0;
-        try (Socket tunnel = openConnectTunnel(proxy, "speed.cloudflare.com", 443)) {
+        try (Socket tunnel = UpstreamProxyConnector.openTunnel(proxy, "speed.cloudflare.com", 443, CONNECT_TIMEOUT_MS)) {
+            tunnel.setSoTimeout(IO_TIMEOUT_MS);
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             try (SSLSocket ssl = (SSLSocket) factory.createSocket(tunnel, "speed.cloudflare.com", 443, true)) {
                 ssl.setSoTimeout(IO_TIMEOUT_MS);
@@ -222,10 +346,11 @@ public final class ProxySpeedTester {
         } catch (IOException ignored) {
         }
 
-        // 3. Measure Upload Speed via HTTPS CONNECT (speed.cloudflare.com)
+        // 3. Measure Upload Speed via Proxy tunnel (speed.cloudflare.com)
         long ulBytes = 0;
         double ulMbps = 0.0;
-        try (Socket tunnel = openConnectTunnel(proxy, "speed.cloudflare.com", 443)) {
+        try (Socket tunnel = UpstreamProxyConnector.openTunnel(proxy, "speed.cloudflare.com", 443, CONNECT_TIMEOUT_MS)) {
+            tunnel.setSoTimeout(IO_TIMEOUT_MS);
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             try (SSLSocket ssl = (SSLSocket) factory.createSocket(tunnel, "speed.cloudflare.com", 443, true)) {
                 ssl.setSoTimeout(IO_TIMEOUT_MS);
@@ -266,7 +391,7 @@ public final class ProxySpeedTester {
         }
 
         boolean ok = dlBytes > 0 || ulBytes > 0 || avgPingMs > 0;
-        return new SpeedResult(ok, avgPingMs, dlMbps, ulMbps, dlBytes, ulBytes,
+        return new SpeedResult(ok, avgPingMs, jitterMs, dlMbps, ulMbps, dlBytes, ulBytes,
                 ok ? "" : "Không thể truyền dữ liệu đo tốc độ");
     }
 
@@ -276,37 +401,6 @@ public final class ProxySpeedTester {
         }
         double seconds = elapsedNs / 1_000_000_000.0;
         return (bytes * 8.0) / (seconds * 1_000_000.0);
-    }
-
-    private static Socket openConnectTunnel(ProxyConfig proxy, String targetHost, int targetPort) throws IOException {
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), CONNECT_TIMEOUT_MS);
-        socket.setSoTimeout(IO_TIMEOUT_MS);
-
-        StringBuilder req = new StringBuilder();
-        req.append("CONNECT ").append(targetHost).append(":").append(targetPort).append(" HTTP/1.1\r\n");
-        req.append("Host: ").append(targetHost).append(":").append(targetPort).append("\r\n");
-        if (proxy.hasAuth()) {
-            req.append("Proxy-Authorization: Basic ").append(proxy.getBasicAuthToken()).append("\r\n");
-        }
-        req.append("\r\n");
-
-        OutputStream out = socket.getOutputStream();
-        out.write(req.toString().getBytes(StandardCharsets.UTF_8));
-        out.flush();
-
-        InputStream in = socket.getInputStream();
-        String statusLine = readAsciiLine(in);
-        int code = ProxyTester.parseHttpStatusCode(statusLine);
-        if (code < 200 || code >= 300) {
-            socket.close();
-            throw new IOException("CONNECT failed with HTTP " + code);
-        }
-        String line;
-        while ((line = readAsciiLine(in)) != null && !line.isEmpty()) {
-            // Drain CONNECT headers
-        }
-        return socket;
     }
 
     private static void skipHttpHeaders(InputStream in) throws IOException {
@@ -321,16 +415,5 @@ public final class ProxySpeedTester {
             else if (state == 3 && b == '\n') break;
             else state = (b == '\r') ? 1 : 0;
         }
-    }
-
-    private static String readAsciiLine(InputStream in) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        int b;
-        while ((b = in.read()) != -1) {
-            if (b == '\n') break;
-            if (b != '\r') sb.append((char) b);
-            if (sb.length() > 4096) break;
-        }
-        return (b == -1 && sb.length() == 0) ? null : sb.toString();
     }
 }

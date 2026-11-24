@@ -20,7 +20,7 @@
     <!-- Dashboard -->
     <string name="action_connect">Kết nối Proxy</string>
     <string name="action_disconnect">Ngắt kết nối</string>
-    <string name="action_test_active">Kiểm tra IP &amp; Ping</string>
+    <string name="action_test_active">Kiểm tra tốc độ</string>
     <string name="label_active_proxy">Proxy đang chọn</string>
     <string name="label_no_proxy_selected">Chưa có Proxy nào được chọn</string>
     <string name="label_select_or_add_hint">Vào tab Danh sách để thêm hoặc chọn Proxy HTTP</string>
@@ -59,19 +59,40 @@
     <string name="desc_edit_proxy">Chỉnh sửa proxy</string>
     <string name="desc_delete_proxy">Xóa proxy</string>
 
-    <!-- Add / Edit Proxy Sheet -->
-    <string name="title_add_proxy">Thêm Proxy HTTP</string>
+    <!-- Add / Edit Proxy Screen -->
+    <string name="title_add_proxy">Thêm Proxy</string>
     <string name="title_edit_proxy">Cập nhật Proxy</string>
-    <string name="hint_proxy_name">Tên gợi nhớ (VD: US East 1)</string>
-    <string name="hint_proxy_host">Địa chỉ HTTP / Host (VD: 192.168.1.10)</string>
-    <string name="hint_proxy_port">Cổng / Port (VD: 8080)</string>
-    <string name="hint_proxy_user">Tài khoản / Username (tùy chọn)</string>
-    <string name="hint_proxy_pass">Mật khẩu / Password (tùy chọn)</string>
+    <string name="section_proxy_server">Thông tin máy chủ Proxy</string>
+    <string name="section_proxy_auth">Xác thực &amp; Phân giải DNS</string>
+    <string name="label_quick_paste_tip">Hỗ trợ dán nhanh ip:port:user:pass hoặc socks5://user:pass@ip:port</string>
+    <string name="hint_proxy_name">Tên cấu hình (VD: US East 1)</string>
+    <string name="label_proxy_protocol">Giao thức</string>
+    <string name="hint_proxy_host">Server (VD: 192.168.1.10)</string>
+    <string name="hint_proxy_port">Port (VD: 8080)</string>
+    <string name="label_proxy_auth_method">Phương thức xác thực</string>
+    <string name="auth_method_none">Không có</string>
+    <string name="auth_method_user_pass">Tài khoản / Mật khẩu</string>
+    <string name="hint_proxy_user">Tài khoản / Username</string>
+    <string name="hint_proxy_pass">Mật khẩu / Password</string>
+    <string name="label_dns_resolution">Độ phân giải DNS</string>
+    <string name="dns_mode_proxy">Proxy</string>
+    <string name="dns_mode_cloudflare">Cloudflare DNS</string>
+    <string name="dns_mode_google">Google DNS</string>
+    <string name="dns_mode_custom">Tùy chỉnh</string>
+    <string name="hint_custom_dns">Máy chủ DNS tùy chỉnh (VD: 9.9.9.9)</string>
     <string name="action_paste_parse">Dán &amp; tự tách (ip:port:user:pass)</string>
     <string name="action_save">Lưu Proxy</string>
     <string name="action_cancel">Hủy</string>
-    <string name="error_host_required">Vui lòng nhập địa chỉ HTTP / IP</string>
-    <string name="error_port_invalid">Cổng phải từ 1 đến 65535</string>
+    <string name="error_host_required">Vui lòng nhập địa chỉ Server / IP</string>
+    <string name="error_port_required">Vui lòng nhập cổng (1 – 65535)</string>
+    <string name="error_port_invalid">Cổng vượt giới hạn (chỉ cho phép từ 1 đến 65535)</string>
+    <string name="error_username_required">Vui lòng nhập tài khoản</string>
+    <string name="error_custom_dns_invalid">Vui lòng nhập địa chỉ máy chủ DNS hợp lệ (VD: 1.1.1.1)</string>
+    <string name="action_test_connection">Kiểm tra kết nối</string>
+    <string name="msg_testing_connection">Đang kiểm tra kết nối tới máy chủ Proxy…</string>
+    <string name="msg_test_connection_ok">Kết nối thành công (%1$d ms)</string>
+    <string name="msg_test_connection_ok_ip">Kết nối thành công • %1$d ms • IP: %2$s</string>
+    <string name="msg_test_connection_failed">Kết nối thất bại: %1$s</string>
     <string name="msg_clipboard_parsed">Đã tự động điền từ Clipboard</string>
     <string name="msg_clipboard_invalid">Không nhận dạng được định dạng ip:port[:user:pass]</string>
 
@@ -378,5 +399,58 @@
     <string name="msg_google_config_missing">Chưa cấu hình Web Client ID cho Google Sign-In</string>
     <string name="msg_signed_out">Đã đăng xuất tài khoản Google</string>
 
-    <string name="label_app_version">Phiên bản: %1$s • Flutter 3.6.1</string>
+    <!-- Localized Proxy & VPN Connection Logs -->
+    <string name="log_proxy_updated">Đã cập nhật Proxy %1$s</string>
+    <string name="log_proxy_added">Đã thêm Proxy mới %1$s</string>
+    <string name="log_proxy_bulk_imported">Nhập hàng loạt thành công %1$d Proxy</string>
+    <string name="log_proxy_deleted">Đã xóa Proxy %1$s</string>
+    <string name="log_proxy_test_ok">Test OK %1$s (%2$dms, IP: %3$s)</string>
+    <string name="log_proxy_test_failed">Test lỗi %1$s: %2$s</string>
+    <string name="log_proxy_batch_test_done">Hoàn tất kiểm tra %1$d Proxy (%2$d hoạt động)</string>
+    <string name="log_proxy_exported_txt">Đã xuất %1$d Proxy ra file .txt</string>
+    <string name="log_proxy_detail_failed">Kiểm tra chi tiết %1$s: Không dùng được (%2$s)</string>
+    <string name="log_proxy_detail_ok">Kiểm tra OK %1$s • Ping %2$dms • DL %3$.2f Mbps</string>
+    <string name="log_vpn_no_proxy">Không có Proxy nào trong danh sách để kết nối</string>
+    <string name="log_vpn_connected">Đã kết nối VPN Proxy cố định -> %1$s (cổng cục bộ :%2$d)</string>
+    <string name="log_vpn_error">Lỗi VPN: %1$s</string>
+    <string name="log_vpn_interface_failed">Không thể khởi tạo giao diện VPN</string>
+    <string name="log_vpn_policy_update_failed">Không thể cập nhật tường lửa / định tuyến VPN: %1$s</string>
+    <string name="log_app_rule_allow_applied">Đã áp dụng quy tắc: Chỉ cho phép %1$d ứng dụng qua Proxy</string>
+    <string name="log_app_rule_block_applied">Đã áp dụng quy tắc: Chặn %1$d ứng dụng không dùng Proxy</string>
+    <string name="log_app_rule_update_failed">Không thể cập nhật quy tắc ứng dụng VPN: %1$s</string>
+    <string name="log_vpn_proxy_switched">Người dùng đã đổi Proxy -> %1$s</string>
+    <string name="log_vpn_disconnected">Đã ngắt kết nối VPN Proxy</string>
+    <string name="log_vpn_upstream_failure">Proxy %1$s gặp lỗi truyền tải (%2$s).</string>
+    <string name="log_firewall_rule_saved">Tường lửa: đã lưu %1$s (%2$d ứng dụng)</string>
+
+    <!-- Network Speed Test (No Map) -->
+    <string name="title_network_speed">Kiểm tra tốc độ mạng</string>
+    <string name="subtitle_network_speed_proxy">Đang đo qua Proxy kết nối</string>
+    <string name="subtitle_network_speed_direct">Đang đo trên mạng hiện tại của thiết bị</string>
+    <string name="label_speed_testing_now">Đang đo Ping, Tải xuống và Tải lên…</string>
+    <string name="label_speed_ready">Nhấn đo lại để kiểm tra tốc độ mạng hiện tại</string>
+    <string name="label_speed_completed_at">Cập nhật lúc %1$s</string>
+    <string name="label_speed_jitter">Jitter</string>
+    <string name="label_speed_transferred">Dung lượng đo: Tải xuống %1$s • Tải lên %2$s</string>
+    <string name="quality_fast">Kết nối nhanh &amp; ổn định</string>
+    <string name="quality_moderate">Tốc độ trung bình</string>
+    <string name="quality_slow">Tốc độ chậm / Độ trễ cao</string>
+    <string name="quality_error">Không thể đo tốc độ</string>
+    <string name="section_connected_ip_info">Thông tin IP đang kết nối</string>
+    <string name="label_connection_route">Đường truyền</string>
+    <string name="label_connected_proxy_node">Máy chủ Proxy</string>
+    <string name="label_direct_no_proxy">Mạng trực tiếp (Chưa bật VPN)</string>
+
+    <!-- Pre-connect Proxy Verification & Error Blocking -->
+    <string name="status_checking_proxy">Đang kiểm tra Proxy…</string>
+    <string name="title_proxy_error_blocked">Proxy lỗi — Không thể kết nối</string>
+    <string name="msg_proxy_connect_blocked_error">Proxy %1$s đang lỗi (%2$s), đã hủy kết nối.</string>
+    <string name="action_inspect_detail">Kiểm tra chi tiết</string>
+    <string name="action_connect_checking">Đang kiểm tra…</string>
+    <string name="action_proxy_error_no_connect">Proxy lỗi</string>
+    <string name="filter_error">Lỗi</string>
+    <string name="msg_batch_test_summary">Kiểm tra %1$d Proxy: %2$d hoạt động, %3$d lỗi (không thể kết nối)</string>
+    <string name="log_proxy_connect_refused">Từ chối kết nối Proxy lỗi %1$s (%2$s)</string>
+
+    <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

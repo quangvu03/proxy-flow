@@ -106,14 +106,18 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             boolean isActive = proxy.getId() == activeProxyId;
 
             tvTitle.setText(proxy.getDisplayTitle());
-            tvAddress.setText(proxy.getAddressDisplay());
+            tvAddress.setText(proxy.getSchemePrefix() + proxy.getAddressDisplay());
             tvActiveBadge.setVisibility(isActive ? View.VISIBLE : View.GONE);
 
+            boolean isFailed = proxy.getLatencyMs() == ProxyConfig.LATENCY_FAILED;
             if (isActive) {
                 cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
                 cardView.setStrokeWidth((int) (2 * ctx.getResources().getDisplayMetrics().density));
                 tvActiveBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_connected_bg)));
+            } else if (isFailed) {
+                cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.status_error));
+                cardView.setStrokeWidth((int) (1.25f * ctx.getResources().getDisplayMetrics().density));
             } else {
                 cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_outline));
                 cardView.setStrokeWidth((int) (1 * ctx.getResources().getDisplayMetrics().density));
@@ -126,18 +130,20 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
                 tvAuthBadge.setText(R.string.badge_auth_no);
             }
 
-            // Latency badge
+            // Latency badge & Connect button appearance
             long lat = proxy.getLatencyMs();
             if (lat == ProxyConfig.LATENCY_UNTESTED) {
                 tvLatencyBadge.setText(R.string.latency_untested);
                 tvLatencyBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_idle));
                 tvLatencyBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
+                styleConnectButtonNormal(ctx);
             } else if (lat == ProxyConfig.LATENCY_FAILED) {
                 tvLatencyBadge.setText(R.string.latency_failed);
                 tvLatencyBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_error));
                 tvLatencyBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
+                styleConnectButtonError(ctx);
             } else {
                 tvLatencyBadge.setText(ctx.getString(R.string.latency_ms, lat));
                 if (lat <= 250) {
@@ -149,6 +155,7 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
                     tvLatencyBadge.setBackgroundTintList(
                             ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_switching_bg)));
                 }
+                styleConnectButtonNormal(ctx);
             }
 
             // Exit IP & Country
@@ -166,6 +173,24 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             btnTest.setOnClickListener(v -> listener.onTestProxy(proxy));
             btnEdit.setOnClickListener(v -> listener.onEditProxy(proxy));
             btnDelete.setOnClickListener(v -> listener.onDeleteProxy(proxy));
+        }
+
+        private void styleConnectButtonNormal(Context ctx) {
+            btnConnectNow.setText(R.string.nav_connect);
+            btnConnectNow.setBackgroundTintList(
+                    ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.md_theme_secondaryContainer)));
+            int fg = ContextCompat.getColor(ctx, R.color.md_theme_onSecondaryContainer);
+            btnConnectNow.setTextColor(fg);
+            btnConnectNow.setIconTint(ColorStateList.valueOf(fg));
+        }
+
+        private void styleConnectButtonError(Context ctx) {
+            btnConnectNow.setText(R.string.action_proxy_error_no_connect);
+            btnConnectNow.setBackgroundTintList(
+                    ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
+            int fg = ContextCompat.getColor(ctx, R.color.status_error);
+            btnConnectNow.setTextColor(fg);
+            btnConnectNow.setIconTint(ColorStateList.valueOf(fg));
         }
     }
 }

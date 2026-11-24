@@ -57,6 +57,10 @@ public class ProxyViewModel extends AndroidViewModel {
         return repository.isBatchTesting();
     }
 
+    public LiveData<ProxyRepository.BatchTestSummary> getBatchTestSummary() {
+        return repository.getBatchTestSummary();
+    }
+
     public LiveData<ConnectionStatus> getConnectionStatus() {
         return runtimeManager.getStatus();
     }

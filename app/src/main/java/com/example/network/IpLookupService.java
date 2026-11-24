@@ -293,12 +293,36 @@ public final class IpLookupService {
     }
 
     private static GeoInfo fetchProxyHttpIpApi(ProxyConfig proxy, String targetIp) {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), TIMEOUT_MS);
+        String querySuffix = "/json/" + targetIp
+                + "?fields=status,country,countryCode,regionName,city,isp,org,lat,lon,query";
+        if (proxy.isSocks5Protocol()) {
+            try (Socket tunnel = UpstreamProxyConnector.openTunnel(proxy, "ip-api.com", 80, TIMEOUT_MS)) {
+                tunnel.setSoTimeout(TIMEOUT_MS);
+                String req = "GET " + querySuffix + " HTTP/1.1\r\n"
+                        + "Host: ip-api.com\r\n"
+                        + "User-Agent: ProxyFlow/1.1\r\n"
+                        + "Accept: application/json\r\n"
+                        + "Accept-Encoding: identity\r\n"
+                        + "Connection: close\r\n\r\n";
+                OutputStream out = tunnel.getOutputStream();
+                out.write(req.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+
+                String rawResp = readSocketText(tunnel);
+                String body = decodeHttpResponseBody(rawResp);
+                JSONObject json = parseFirstJsonObject(body);
+                if (json != null && "success".equalsIgnoreCase(json.optString("status"))) {
+                    return GeoInfo.fromIpApi(json);
+                }
+            } catch (Exception ignored) {
+            }
+            return new GeoInfo();
+        }
+
+        try (Socket socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, TIMEOUT_MS)) {
             socket.setSoTimeout(TIMEOUT_MS);
 
-            String targetPath = "http://ip-api.com/json/" + targetIp
-                    + "?fields=status,country,countryCode,regionName,city,isp,org,lat,lon,query";
+            String targetPath = "http://ip-api.com" + querySuffix;
             StringBuilder req = new StringBuilder();
             req.append("GET ").append(targetPath).append(" HTTP/1.1\r\n");
             req.append("Host: ip-api.com\r\n");
@@ -335,34 +359,8 @@ public final class IpLookupService {
     }
 
     private static String executeHttpsGetViaProxy(ProxyConfig proxy, String targetHost, String path, int timeoutMs) {
-        try (Socket tunnel = new Socket()) {
-            tunnel.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
+        try (Socket tunnel = UpstreamProxyConnector.openTunnel(proxy, targetHost, 443, timeoutMs)) {
             tunnel.setSoTimeout(timeoutMs);
-
-            StringBuilder connectReq = new StringBuilder();
-            connectReq.append("CONNECT ").append(targetHost).append(":443 HTTP/1.1\r\n");
-            connectReq.append("Host: ").append(targetHost).append(":443\r\n");
-            if (proxy.hasAuth()) {
-                connectReq.append("Proxy-Authorization: Basic ").append(proxy.getBasicAuthToken()).append("\r\n");
-            }
-            connectReq.append("\r\n");
-
-            OutputStream rawOut = tunnel.getOutputStream();
-            rawOut.write(connectReq.toString().getBytes(StandardCharsets.UTF_8));
-            rawOut.flush();
-
-            BufferedReader headerReader = new BufferedReader(
-                    new InputStreamReader(tunnel.getInputStream(), StandardCharsets.ISO_8859_1));
-            String statusLine = headerReader.readLine();
-            if (statusLine == null || ProxyTester.parseHttpStatusCode(statusLine) < 200
-                    || ProxyTester.parseHttpStatusCode(statusLine) >= 300) {
-                return "";
-            }
-            String line;
-            while ((line = headerReader.readLine()) != null && !line.isEmpty()) {
-                // Consume proxy CONNECT response headers
-            }
-
             SSLSocketFactory sslFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             try (SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket(tunnel, targetHost, 443, true)) {
                 sslSocket.setSoTimeout(timeoutMs);

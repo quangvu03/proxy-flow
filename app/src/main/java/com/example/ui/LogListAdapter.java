@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.R;
+import com.example.data.ProxyLogFormatter;
 import com.example.model.ProxyLogEntry;
 
 import java.text.SimpleDateFormat;
@@ -75,7 +76,7 @@ public class LogListAdapter extends ListAdapter<ProxyLogEntry, LogListAdapter.Lo
             Context ctx = itemView.getContext();
             tvTime.setText(TIME_FORMAT.format(new Date(entry.getTimestamp())));
             tvLevel.setText(entry.getLevel().name());
-            tvMessage.setText(entry.getMessage());
+            tvMessage.setText(ProxyLogFormatter.localizeForDisplay(ctx, entry.getMessage()));
 
             int textColor;
             int bgColor;
