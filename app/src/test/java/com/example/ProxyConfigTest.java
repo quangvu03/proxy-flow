@@ -112,4 +112,20 @@ public class ProxyConfigTest {
         assertFalse(ProxyConfig.isValidCustomDnsInput("999.999.999.999"));
         assertFalse(ProxyConfig.isValidCustomDnsInput("not-an-ip"));
     }
+
+    @Test
+    public void parseAllProtocols_andAutoPrefix_setsProtocolAll() {
+        assertEquals(ProxyConfig.Protocol.ALL, ProxyConfig.Protocol.fromString("ALL"));
+        assertEquals(ProxyConfig.Protocol.ALL, ProxyConfig.Protocol.fromString("AUTO"));
+        assertEquals(ProxyConfig.Protocol.ALL, ProxyConfig.Protocol.fromString("Tất cả giao thức"));
+        assertEquals(ProxyConfig.Protocol.ALL, ProxyConfig.Protocol.fromString("All Protocols"));
+        assertTrue(ProxyConfig.Protocol.ALL.isAutoDetect());
+
+        ProxyConfig parsed = ProxyConfig.parseFromLine("auto://u1:p1@198.51.100.10:1080");
+        assertNotNull(parsed);
+        assertEquals(ProxyConfig.Protocol.ALL, parsed.getProtocol());
+        assertEquals("198.51.100.10", parsed.getHost());
+        assertEquals(1080, parsed.getPort());
+        assertTrue(parsed.hasAuth());
+    }
 }

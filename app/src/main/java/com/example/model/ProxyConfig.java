@@ -1,5 +1,9 @@
 package com.example.model;
 
+import android.content.Context;
+
+import com.example.R;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,7 +14,7 @@ import java.util.regex.Pattern;
 
 /**
  * Data model representing a Proxy configuration with protocol
- * (SOCKS5, HTTP, HTTP + TLS, SOCKS5 + UDP, SOCKS5 + TLS), host, port,
+ * (All Protocols / Auto, SOCKS5, HTTP, HTTP + TLS, SOCKS5 + UDP, SOCKS5 + TLS), host, port,
  * authentication method (None / Username & Password), DNS resolution mode
  * (Proxy, Cloudflare DNS, Google DNS, Custom), and health/latency telemetry.
  */
@@ -19,6 +23,7 @@ public class ProxyConfig {
     public static final long LATENCY_FAILED = -2L;
 
     public enum Protocol {
+        ALL("Tất cả giao thức", "auto://"),
         SOCKS5("SOCKS5", "socks5://"),
         HTTP("HTTP", "http://"),
         HTTP_TLS("HTTP + TLS", "http+tls://"),
@@ -37,8 +42,19 @@ public class ProxyConfig {
             return displayLabel;
         }
 
+        public String getDisplayLabel(Context context) {
+            if (this == ALL && context != null) {
+                return context.getString(R.string.protocol_all);
+            }
+            return displayLabel;
+        }
+
         public String getSchemePrefix() {
             return schemePrefix;
+        }
+
+        public boolean isAutoDetect() {
+            return this == ALL;
         }
 
         public boolean isSocks5() {
@@ -57,6 +73,14 @@ public class ProxyConfig {
                     .replace(" ", "")
                     .replace("-", "_");
             switch (norm) {
+                case "ALL":
+                case "AUTO":
+                case "AUTO_DETECT":
+                case "ALLPROTOCOLS":
+                case "ALL_PROTOCOLS":
+                case "TẤTCẢGIAOTHỨC":
+                case "TAT_CA_GIAO_THUC":
+                    return ALL;
                 case "SOCKS5":
                 case "SOCKS":
                     return SOCKS5;
@@ -81,15 +105,39 @@ public class ProxyConfig {
 
     public enum AuthMethod {
         NONE,
-        USER_PASS;
+        USER_PASS,
+        HTTP_BASIC,
+        HTTP_DIGEST,
+        BEARER_TOKEN;
+
+        public boolean isCredentialPair() {
+            return this == USER_PASS || this == HTTP_BASIC || this == HTTP_DIGEST;
+        }
 
         public static AuthMethod fromString(String raw) {
             if (raw == null) return NONE;
-            String norm = raw.trim().toUpperCase(Locale.ROOT);
-            if ("USER_PASS".equals(norm) || "PASSWORD".equals(norm) || "BASIC".equals(norm)) {
-                return USER_PASS;
+            String norm = raw.trim().toUpperCase(Locale.ROOT)
+                    .replace(" ", "_")
+                    .replace("-", "_");
+            switch (norm) {
+                case "USER_PASS":
+                case "PASSWORD":
+                case "AUTO":
+                    return USER_PASS;
+                case "HTTP_BASIC":
+                case "BASIC":
+                    return HTTP_BASIC;
+                case "HTTP_DIGEST":
+                case "DIGEST":
+                    return HTTP_DIGEST;
+                case "BEARER_TOKEN":
+                case "BEARER":
+                case "TOKEN":
+                    return BEARER_TOKEN;
+                case "NONE":
+                default:
+                    return NONE;
             }
-            return NONE;
         }
     }
 
@@ -241,7 +289,7 @@ public class ProxyConfig {
     public String getUsername() { return username; }
     public void setUsername(String username) {
         this.username = username != null ? username.trim() : "";
-        if (!this.username.isEmpty()) {
+        if (!this.username.isEmpty() && getAuthMethod() == AuthMethod.NONE) {
             this.authMethod = AuthMethod.USER_PASS;
         }
     }
@@ -293,8 +341,43 @@ public class ProxyConfig {
     }
 
     public boolean hasAuth() {
-        return getAuthMethod() == AuthMethod.USER_PASS
-                && username != null && !username.isEmpty();
+        AuthMethod method = getAuthMethod();
+        if (method == AuthMethod.NONE) {
+            return false;
+        }
+        if (method == AuthMethod.BEARER_TOKEN) {
+            return !getAuthToken().isEmpty();
+        }
+        return (username != null && !username.isEmpty())
+                || (password != null && !password.isEmpty());
+    }
+
+    public String getAuthToken() {
+        if (password != null && !password.trim().isEmpty()) {
+            return password.trim();
+        }
+        return username != null ? username.trim() : "";
+    }
+
+    public String getAuthDisplaySummary(Context context) {
+        if (!hasAuth()) {
+            return context != null ? context.getString(R.string.badge_auth_no) : "No Auth";
+        }
+        String userDisplay = (username != null && !username.isEmpty()) ? username : "Password";
+        switch (getAuthMethod()) {
+            case BEARER_TOKEN:
+                return context != null ? context.getString(R.string.badge_auth_token) : "Bearer Token";
+            case HTTP_DIGEST:
+                return (context != null ? context.getString(R.string.badge_auth_digest) : "Digest")
+                        + ": " + userDisplay;
+            case HTTP_BASIC:
+                return (context != null ? context.getString(R.string.badge_auth_basic) : "Basic")
+                        + ": " + userDisplay;
+            case USER_PASS:
+            default:
+                return (context != null ? context.getString(R.string.badge_auth_yes) : "User/Pass")
+                        + ": " + userDisplay;
+        }
     }
 
     public String getAddressDisplay() {
@@ -364,13 +447,13 @@ public class ProxyConfig {
         if (!hasAuth()) {
             return "";
         }
-        String raw = username + ":" + (password != null ? password : "");
+        String raw = (username != null ? username : "") + ":" + (password != null ? password : "");
         return encodeBase64(raw.getBytes(StandardCharsets.UTF_8));
     }
 
     public String toExportLine() {
         if (hasAuth()) {
-            return host + ":" + port + ":" + username + ":" + (password != null ? password : "");
+            return host + ":" + port + ":" + (username != null ? username : "") + ":" + (password != null ? password : "");
         }
         return host + ":" + port;
     }
@@ -396,7 +479,10 @@ public class ProxyConfig {
 
         Protocol detectedProtocol = Protocol.HTTP;
         String lower = line.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("socks5+tls://") || lower.startsWith("sock5+tls://")) {
+        if (lower.startsWith("auto://") || lower.startsWith("all://")) {
+            detectedProtocol = Protocol.ALL;
+            line = line.substring(line.indexOf("://") + 3);
+        } else if (lower.startsWith("socks5+tls://") || lower.startsWith("sock5+tls://")) {
             detectedProtocol = Protocol.SOCKS5_TLS;
             line = line.substring(line.indexOf("://") + 3);
         } else if (lower.startsWith("socks5+udp://")) {
@@ -424,21 +510,21 @@ public class ProxyConfig {
         String pass = "";
 
         if (line.contains("@")) {
-            String[] atParts = line.split("@", 2);
-            String left = atParts[0];
-            String right = atParts[1];
+            int lastAt = line.lastIndexOf('@');
+            String left = line.substring(0, lastAt);
+            String right = line.substring(lastAt + 1);
             String[] leftColon = left.split(":", 2);
             String[] rightColon = right.split(":", 2);
             if (rightColon.length == 2 && isValidPortString(rightColon[1])) {
-                user = leftColon[0];
-                pass = leftColon.length > 1 ? leftColon[1] : "";
+                user = decodePercentComponent(leftColon[0]);
+                pass = leftColon.length > 1 ? decodePercentComponent(leftColon[1]) : "";
                 host = rightColon[0];
                 port = Integer.parseInt(rightColon[1]);
             } else if (leftColon.length == 2 && isValidPortString(leftColon[1])) {
                 host = leftColon[0];
                 port = Integer.parseInt(leftColon[1]);
-                user = rightColon[0];
-                pass = rightColon.length > 1 ? rightColon[1] : "";
+                user = decodePercentComponent(rightColon[0]);
+                pass = rightColon.length > 1 ? decodePercentComponent(rightColon[1]) : "";
             } else {
                 return null;
             }
@@ -465,7 +551,7 @@ public class ProxyConfig {
         config.setProtocol(detectedProtocol);
         config.setHost(host);
         config.setPort(port);
-        if (!user.isEmpty()) {
+        if (!user.isEmpty() || !pass.isEmpty()) {
             config.setAuthMethod(AuthMethod.USER_PASS);
             config.setUsername(user);
             config.setPassword(pass);
@@ -478,6 +564,28 @@ public class ProxyConfig {
         config.setCustomDns("");
         config.setEnabled(true);
         return config;
+    }
+
+    private static String decodePercentComponent(String input) {
+        if (input == null || !input.contains("%")) {
+            return input != null ? input : "";
+        }
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '%' && i + 2 < input.length()) {
+                int hi = Character.digit(input.charAt(i + 1), 16);
+                int lo = Character.digit(input.charAt(i + 2), 16);
+                if (hi >= 0 && lo >= 0) {
+                    baos.write((hi << 4) | lo);
+                    i += 2;
+                    continue;
+                }
+            }
+            byte[] utf8 = String.valueOf(c).getBytes(StandardCharsets.UTF_8);
+            baos.write(utf8, 0, utf8.length);
+        }
+        return new String(baos.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private static boolean isValidPortString(String val) {

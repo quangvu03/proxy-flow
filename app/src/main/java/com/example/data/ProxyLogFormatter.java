@@ -29,6 +29,7 @@ public final class ProxyLogFormatter {
     private static final Pattern P_PROXY_DETAIL_FAILED = Pattern.compile("^(?:Kiểm tra chi tiết (.+?): Không (?:xài|dùng) được|Detailed check (.+?): Unusable) \\((.+)\\)$");
     private static final Pattern P_PROXY_DETAIL_OK = Pattern.compile("^(?:Kiểm tra OK|Check OK) (.+?) • Ping (\\d+)ms • DL ([\\d.,]+) Mbps$");
     private static final Pattern P_PROXY_CONNECT_REFUSED = Pattern.compile("^(?:Từ chối kết nối Proxy lỗi|Refused connecting to faulty Proxy) (.+?) \\((.+)\\)$");
+    private static final Pattern P_PROTOCOL_DETECTED = Pattern.compile("^(?:Đã nhận diện giao thức (.+?) cho Proxy (.+)|Detected protocol (.+?) for Proxy (.+))$");
 
     private static final Pattern P_VPN_CONNECTED = Pattern.compile("^(?:Đã kết nối VPN Proxy cố định|Connected Fixed Proxy VPN) -> (.+?) \\((?:cổng cục bộ|local port) :(\\d+)\\)$");
     private static final Pattern P_VPN_ERROR = Pattern.compile("^(?:Lỗi VPN|VPN Error): (.+)$");
@@ -47,6 +48,12 @@ public final class ProxyLogFormatter {
     private static final Pattern P_FW_BLOCKED = Pattern.compile("^(?:Tường lửa đã chặn (.+?) truy cập|Firewall blocked (.+?) from accessing) (.+)$");
     private static final Pattern P_FW_RULE_SAVED = Pattern.compile("^(?:Tường lửa: đã lưu (.+?) \\((\\d+) ứng dụng\\)|Firewall: saved (.+?) \\((\\d+) apps\\))$");
     private static final Pattern P_PRIVATE_ON = Pattern.compile("^(?:Đã bật định tuyến mạng riêng qua Proxy \\((\\d+) phạm vi IP\\)|Private network routing via Proxy enabled \\((\\d+) IP ranges\\))$");
+
+    private static final Pattern P_TRAFFIC_SEND = Pattern.compile("^(?:Gửi|Send) (.+?) -> (.+?) (?:qua|via) (.+)$");
+    private static final Pattern P_TRAFFIC_TUNNEL = Pattern.compile("^(?:Đã mở kết nối|Tunnel opened) (.+?) -> (.+?) \\((\\d+) ms\\)$");
+    private static final Pattern P_TRAFFIC_DONE = Pattern.compile("^(?:Hoàn tất|Completed) (.+?) • (?:Gửi|Sent) ↑ (.+?) • (?:Nhận|Recv) ↓ (.+?) \\((\\d+) ms\\)$");
+    private static final Pattern P_TRAFFIC_FAIL = Pattern.compile("^(?:Lỗi gửi|Send error) (.+?) -> (.+?) \\((.+)\\)$");
+    private static final Pattern P_TRAFFIC_PRIVATE_BLOCK = Pattern.compile("^(?:Chặn định tuyến mạng riêng tới|Blocked private network routing to) (.+)$");
 
     private static final Pattern P_DURATION_HM = Pattern.compile("^(\\d+) (?:giờ|hr) (\\d+) (?:phút|min)$");
     private static final Pattern P_DURATION_H = Pattern.compile("^(\\d+) (?:giờ|hr)$");
@@ -149,6 +156,11 @@ public final class ProxyLogFormatter {
         if ((m = P_PROXY_CONNECT_REFUSED.matcher(message)).matches()) {
             return localized.getString(R.string.log_proxy_connect_refused, m.group(1), m.group(2));
         }
+        if ((m = P_PROTOCOL_DETECTED.matcher(message)).matches()) {
+            String proto = m.group(1) != null ? m.group(1) : m.group(3);
+            String addr = m.group(2) != null ? m.group(2) : m.group(4);
+            return localized.getString(R.string.log_protocol_auto_detected, addr, proto);
+        }
         if ((m = P_VPN_CONNECTED.matcher(message)).matches()) {
             return localized.getString(R.string.log_vpn_connected, m.group(1), parseIntSafe(m.group(2)));
         }
@@ -206,6 +218,22 @@ public final class ProxyLogFormatter {
         if ((m = P_PRIVATE_ON.matcher(message)).matches()) {
             String count = m.group(1) != null ? m.group(1) : m.group(2);
             return localized.getString(R.string.log_private_routing_enabled, parseIntSafe(count));
+        }
+        if ((m = P_TRAFFIC_SEND.matcher(message)).matches()) {
+            return localized.getString(R.string.log_traffic_send_request, m.group(1), m.group(2), m.group(3));
+        }
+        if ((m = P_TRAFFIC_TUNNEL.matcher(message)).matches()) {
+            return localized.getString(R.string.log_traffic_tunnel_ready, m.group(1), m.group(2), parseLongSafe(m.group(3)));
+        }
+        if ((m = P_TRAFFIC_DONE.matcher(message)).matches()) {
+            return localized.getString(R.string.log_traffic_transfer_done,
+                    m.group(1), m.group(2), m.group(3), parseLongSafe(m.group(4)));
+        }
+        if ((m = P_TRAFFIC_FAIL.matcher(message)).matches()) {
+            return localized.getString(R.string.log_traffic_send_failed, m.group(1), m.group(2), m.group(3));
+        }
+        if ((m = P_TRAFFIC_PRIVATE_BLOCK.matcher(message)).matches()) {
+            return localized.getString(R.string.log_traffic_private_blocked, m.group(1));
         }
         return message;
     }

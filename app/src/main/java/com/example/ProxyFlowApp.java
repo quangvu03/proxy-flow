@@ -2,6 +2,8 @@ package com.example;
 
 import android.app.Application;
 
+import com.example.ads.AdMobBannerHelper;
+import com.example.ads.AppOpenAdManager;
 import com.example.data.SettingsPreferences;
 import com.example.ui.MapHelper;
 
@@ -17,5 +19,7 @@ public class ProxyFlowApp extends Application {
         super.onCreate();
         SettingsPreferences.applySavedThemeAndLocale(this);
         MapHelper.initConfig(this);
+        AdMobBannerHelper.initializeAsync(this);
+        AppOpenAdManager.getInstance(this).register(this);
     }
 }

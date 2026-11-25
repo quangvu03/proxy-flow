@@ -19,7 +19,7 @@ import java.util.List;
 public class ProxyDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "proxyflow.db";
-    private static final int DATABASE_VERSION = 4;
+    private static final int DATABASE_VERSION = 5;
 
     private static volatile ProxyDatabaseHelper instance;
 
@@ -47,6 +47,8 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     private static final String COL_LOG_TS = "timestamp";
     private static final String COL_LOG_LEVEL = "level";
     private static final String COL_LOG_MESSAGE = "message";
+    private static final String COL_LOG_PACKAGE = "package_name";
+    private static final String COL_LOG_TAG = "event_tag";
 
     private static final String TABLE_SETTINGS = "app_settings";
     private static final String COL_SETTING_KEY = "setting_key";
@@ -103,7 +105,9 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
                 + COL_LOG_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + COL_LOG_TS + " INTEGER NOT NULL, "
                 + COL_LOG_LEVEL + " TEXT NOT NULL, "
-                + COL_LOG_MESSAGE + " TEXT NOT NULL"
+                + COL_LOG_MESSAGE + " TEXT NOT NULL, "
+                + COL_LOG_PACKAGE + " TEXT NOT NULL DEFAULT '', "
+                + COL_LOG_TAG + " TEXT NOT NULL DEFAULT ''"
                 + ")";
         db.execSQL(createLogs);
 
@@ -174,6 +178,10 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
             addColumnIfMissing(db, TABLE_PROXIES, COL_CUSTOM_DNS, "TEXT NOT NULL DEFAULT ''");
             db.execSQL("UPDATE " + TABLE_PROXIES + " SET " + COL_AUTH_METHOD + " = 'USER_PASS' WHERE "
                     + COL_USERNAME + " IS NOT NULL AND " + COL_USERNAME + " != ''");
+        }
+        if (oldVersion < 5) {
+            addColumnIfMissing(db, TABLE_LOGS, COL_LOG_PACKAGE, "TEXT NOT NULL DEFAULT ''");
+            addColumnIfMissing(db, TABLE_LOGS, COL_LOG_TAG, "TEXT NOT NULL DEFAULT ''");
         }
     }
 
@@ -255,6 +263,14 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_PROXIES, cv, COL_ID + " = ?", new String[]{String.valueOf(proxyId)});
     }
 
+    public synchronized void updateProxyProtocol(long proxyId, ProxyConfig.Protocol protocol) {
+        if (proxyId <= 0 || protocol == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put(COL_PROTOCOL, protocol.name());
+        db.update(TABLE_PROXIES, cv, COL_ID + " = ?", new String[]{String.valueOf(proxyId)});
+    }
+
     public synchronized void setProxyEnabled(long proxyId, boolean enabled) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues cv = new ContentValues();
@@ -303,25 +319,34 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
     }
 
     public synchronized void insertLog(ProxyLogEntry.Level level, String message) {
+        insertLog(level, message, "", "");
+    }
+
+    public synchronized void insertLog(ProxyLogEntry.Level level, String message,
+                                       String packageName, String eventTag) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues cv = new ContentValues();
         cv.put(COL_LOG_TS, System.currentTimeMillis());
-        cv.put(COL_LOG_LEVEL, level.name());
+        cv.put(COL_LOG_LEVEL, level != null ? level.name() : ProxyLogEntry.Level.INFO.name());
         cv.put(COL_LOG_MESSAGE, message != null ? message : "");
+        cv.put(COL_LOG_PACKAGE, packageName != null ? packageName : "");
+        cv.put(COL_LOG_TAG, eventTag != null ? eventTag : "");
         db.insert(TABLE_LOGS, null, cv);
         db.execSQL("DELETE FROM " + TABLE_LOGS + " WHERE " + COL_LOG_ID + " NOT IN (SELECT "
-                + COL_LOG_ID + " FROM " + TABLE_LOGS + " ORDER BY " + COL_LOG_ID + " DESC LIMIT 200)");
+                + COL_LOG_ID + " FROM " + TABLE_LOGS + " ORDER BY " + COL_LOG_ID + " DESC LIMIT 400)");
     }
 
     public synchronized List<ProxyLogEntry> getRecentLogs() {
         List<ProxyLogEntry> logs = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
         try (Cursor cursor = db.query(TABLE_LOGS, null, null, null, null, null,
-                COL_LOG_ID + " DESC", "150")) {
+                COL_LOG_ID + " DESC", "250")) {
             int idxId = cursor.getColumnIndexOrThrow(COL_LOG_ID);
             int idxTs = cursor.getColumnIndexOrThrow(COL_LOG_TS);
             int idxLvl = cursor.getColumnIndexOrThrow(COL_LOG_LEVEL);
             int idxMsg = cursor.getColumnIndexOrThrow(COL_LOG_MESSAGE);
+            int idxPkg = cursor.getColumnIndex(COL_LOG_PACKAGE);
+            int idxTag = cursor.getColumnIndex(COL_LOG_TAG);
             while (cursor.moveToNext()) {
                 ProxyLogEntry.Level level;
                 try {
@@ -329,11 +354,15 @@ public class ProxyDatabaseHelper extends SQLiteOpenHelper {
                 } catch (IllegalArgumentException e) {
                     level = ProxyLogEntry.Level.INFO;
                 }
+                String pkg = idxPkg >= 0 ? cursor.getString(idxPkg) : "";
+                String tag = idxTag >= 0 ? cursor.getString(idxTag) : "";
                 logs.add(new ProxyLogEntry(
                         cursor.getLong(idxId),
                         cursor.getLong(idxTs),
                         level,
-                        cursor.getString(idxMsg)
+                        cursor.getString(idxMsg),
+                        pkg,
+                        tag
                 ));
             }
         }

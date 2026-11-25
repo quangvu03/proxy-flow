@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -27,6 +28,8 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.example.ads.AdMobBannerHelper;
+import com.example.ads.AppOpenAdManager;
 import com.example.auth.GoogleAuthManager;
 import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
@@ -76,6 +79,8 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     private MaterialToolbar topAppBar;
     private BottomNavigationView bottomNav;
     private NavigationRailView navRail;
+    private View adBannerWrapper;
+    private final AdMobBannerHelper.BannerController bannerController = new AdMobBannerHelper.BannerController();
 
     @Nullable
     private FirebaseAuth firebaseAuth;
@@ -84,6 +89,9 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
 
     private int currentTabId = R.id.nav_connect;
     private long pendingVpnProxyId = -1L;
+    @Nullable
+    private ProxyConfig pendingVpnProxy;
+    private String lastShownConnectionError = "";
 
     private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -91,6 +99,8 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                     launchVpnAfterPermissions(pendingVpnProxyId);
                 } else {
                     Toast.makeText(this, R.string.msg_vpn_permission_denied, Toast.LENGTH_SHORT).show();
+                    ProxyRuntimeManager.getInstance().postDisconnected(pendingVpnProxy, "");
+                    pendingVpnProxy = null;
                 }
             });
 
@@ -115,6 +125,8 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         updateTopLoginPill(GoogleAuthManager.getCurrentUser(this));
         bottomNav = findViewById(R.id.bottom_navigation);
         navRail = findViewById(R.id.navigation_rail);
+        adBannerWrapper = findViewById(R.id.ad_banner_wrapper);
+        ViewGroup adBannerContainer = findViewById(R.id.ad_banner_container);
 
         splashOverlay = findViewById(R.id.splash_overlay);
         View splashBrandContainer = findViewById(R.id.splash_brand_container);
@@ -132,6 +144,8 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             );
             if (bottomNav != null) {
                 bottomNav.setPadding(0, 0, 0, sysBars.bottom);
+            } else if (adBannerWrapper != null) {
+                adBannerWrapper.setPadding(0, 0, 0, sysBars.bottom);
             }
             if (navRail != null) {
                 navRail.setPadding(sysBars.left, sysBars.top, 0, sysBars.bottom);
@@ -147,6 +161,8 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             }
             return WindowInsetsCompat.CONSUMED;
         });
+
+        bannerController.attachAndLoad(this, adBannerWrapper, adBannerContainer);
 
         setupStartupSplash(savedInstanceState, splashBrandContainer);
 
@@ -197,6 +213,19 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                 }
             });
         }
+
+        viewModel.getConnectionStatus().observe(this, status -> {
+            if (status == null) return;
+            if (status.getState() == ConnectionStatus.State.ERROR && !status.getLastError().isEmpty()) {
+                if (!status.getLastError().equals(lastShownConnectionError)) {
+                    lastShownConnectionError = status.getLastError();
+                    Toast.makeText(this, status.getLastError(), Toast.LENGTH_LONG).show();
+                }
+            } else if (status.getState() == ConnectionStatus.State.CONNECTED
+                    || status.getState() == ConnectionStatus.State.CONNECTING) {
+                lastShownConnectionError = "";
+            }
+        });
     }
 
     @Override
@@ -218,11 +247,18 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     @Override
     protected void onResume() {
         super.onResume();
+        bannerController.onResume();
         updateTopLoginPill(GoogleAuthManager.getCurrentUser(this));
         SettingsPreferences settingsPrefs = new SettingsPreferences(this);
         if (settingsPrefs.getThemeMode() == SettingsPreferences.ThemeMode.SYSTEM_TIME) {
             SettingsPreferences.applyThemeMode(SettingsPreferences.ThemeMode.SYSTEM_TIME);
         }
+    }
+
+    @Override
+    protected void onPause() {
+        bannerController.onPause();
+        super.onPause();
     }
 
     private void setupTopLoginAction(MaterialToolbar toolbar) {
@@ -277,6 +313,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
 
     @Override
     protected void onDestroy() {
+        bannerController.onDestroy();
         if (hideSplashRunnable != null) {
             splashHandler.removeCallbacks(hideSplashRunnable);
         }
@@ -399,6 +436,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                 boolean vpnAlreadyRunning = currentStatus.isRunning();
                 repository.markActiveProxySync(target.getId());
                 final long targetProxyId = target.getId();
+                final ProxyConfig chosenTarget = target;
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) {
                         return;
@@ -407,6 +445,12 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                         ProxyVpnService.switchToProxy(this, targetProxyId);
                         onNavigateToTab(R.id.nav_connect);
                     } else {
+                        pendingVpnProxy = chosenTarget;
+                        ProxyRuntimeManager.getInstance().postStatus(new ConnectionStatus(
+                                ConnectionStatus.State.CONNECTING,
+                                chosenTarget,
+                                0, 0L, 0L, 0, "", 0L
+                        ));
                         startVpnWithPermissions(targetProxyId);
                         if (switchIfRunning) {
                             onNavigateToTab(R.id.nav_connect);
@@ -424,6 +468,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
+                AppOpenAdManager.getInstance(this).suppressNextForegroundOpen();
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
                 return;
             }
@@ -434,6 +479,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     private void proceedWithVpnPreparation(long proxyId) {
         Intent prepareIntent = VpnService.prepare(this);
         if (prepareIntent != null) {
+            AppOpenAdManager.getInstance(this).suppressNextForegroundOpen();
             vpnPermissionLauncher.launch(prepareIntent);
         } else {
             launchVpnAfterPermissions(proxyId);
@@ -441,6 +487,13 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     }
 
     private void launchVpnAfterPermissions(long proxyId) {
-        ProxyVpnService.startVpn(this, proxyId);
+        try {
+            ProxyVpnService.startVpn(this, proxyId);
+        } catch (Exception e) {
+            String err = e.getMessage() != null ? e.getMessage() : getString(R.string.status_error);
+            ProxyRuntimeManager.getInstance().postDisconnected(pendingVpnProxy, err);
+        } finally {
+            pendingVpnProxy = null;
+        }
     }
 }

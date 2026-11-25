@@ -186,11 +186,11 @@ public class NoAuthAndUpstreamTest {
     }
 
     @Test
-    public void proxyTesterAndSpeedTester_withoutCredentials_doNotReportWrongPasswordOn407() throws Exception {
+    public void proxyTesterAndSpeedTester_withoutCredentials_reportAuthRequiredNotWrongPasswordOn407() throws Exception {
         try (ServerSocket authProxyServer = new ServerSocket(0)) {
             int port = authProxyServer.getLocalPort();
             Thread serverThread = new Thread(() -> {
-                for (int i = 0; i < 4; i++) {
+                for (int i = 0; i < 6; i++) {
                     try (Socket client = authProxyServer.accept()) {
                         BufferedReader reader = new BufferedReader(
                                 new InputStreamReader(client.getInputStream(), StandardCharsets.ISO_8859_1));
@@ -211,7 +211,7 @@ public class NoAuthAndUpstreamTest {
             serverThread.setDaemon(true);
             serverThread.start();
 
-            // 1. No credentials entered -> must connect/test cleanly without "Sai tài khoản hoặc mật khẩu"
+            // 1. No credentials entered -> fails safely with "yêu cầu xác thực" (never "Sai tài khoản")
             ProxyConfig noAuthProxy = new ProxyConfig();
             noAuthProxy.setProtocol(ProxyConfig.Protocol.HTTP);
             noAuthProxy.setHost("127.0.0.1");
@@ -219,15 +219,16 @@ public class NoAuthAndUpstreamTest {
             noAuthProxy.setAuthMethod(ProxyConfig.AuthMethod.NONE);
 
             ProxyTester.TestResult noAuthTest = ProxyTester.testProxy(noAuthProxy, 3000);
-            assertTrue(noAuthTest.isSuccess());
+            assertFalse(noAuthTest.isSuccess());
+            assertTrue(noAuthTest.getErrorMessage().contains("yêu cầu xác thực"));
             assertFalse(noAuthTest.getErrorMessage().contains("Sai tài khoản"));
 
             ProxySpeedTester.DiagnosticResult diag = ProxySpeedTester.runDiagnostics(noAuthProxy);
-            assertTrue(diag.isUsable());
-            assertEquals(ProxySpeedTester.AuthState.NOT_REQUIRED, diag.getAuthState());
+            assertFalse(diag.isUsable());
+            assertEquals(ProxySpeedTester.AuthState.REQUIRED, diag.getAuthState());
             assertFalse(diag.getErrorMessage().contains("Sai tài khoản"));
 
-            // 2. Credentials entered AND wrong -> still reports 407 wrong credentials
+            // 2. Credentials entered AND wrong -> reports 407 wrong credentials & FAILED_407
             ProxyConfig wrongCredProxy = new ProxyConfig();
             wrongCredProxy.setProtocol(ProxyConfig.Protocol.HTTP);
             wrongCredProxy.setHost("127.0.0.1");
@@ -243,12 +244,12 @@ public class NoAuthAndUpstreamTest {
     }
 
     @Test
-    public void proxyTester_socks5WithoutCredentials_avoidsWrongPasswordErrorWhenServerRequiresAuth()
+    public void proxyTester_socks5WithoutCredentials_reportsAuthRequiredWhenServerRequiresAuth()
             throws Exception {
         try (ServerSocket socksServer = new ServerSocket(0)) {
             int port = socksServer.getLocalPort();
             Thread serverThread = new Thread(() -> {
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < 3; i++) {
                     try (Socket client = socksServer.accept()) {
                         DataInputStream in = new DataInputStream(client.getInputStream());
                         OutputStream out = client.getOutputStream();
@@ -272,8 +273,13 @@ public class NoAuthAndUpstreamTest {
             socksNoAuth.setAuthMethod(ProxyConfig.AuthMethod.NONE);
 
             ProxyTester.TestResult result = ProxyTester.testProxy(socksNoAuth, 3000);
-            assertTrue(result.isSuccess());
+            assertFalse(result.isSuccess());
+            assertTrue(result.getErrorMessage().contains("yêu cầu xác thực"));
             assertFalse(result.getErrorMessage().contains("Sai tài khoản"));
+
+            ProxySpeedTester.DiagnosticResult diag = ProxySpeedTester.runDiagnostics(socksNoAuth);
+            assertFalse(diag.isUsable());
+            assertEquals(ProxySpeedTester.AuthState.REQUIRED, diag.getAuthState());
         }
     }
 

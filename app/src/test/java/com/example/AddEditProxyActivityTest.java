@@ -1,6 +1,7 @@
 package com.example;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -168,6 +169,9 @@ public class AddEditProxyActivityTest {
         android.widget.AutoCompleteTextView actvDns = activity.findViewById(R.id.actv_proxy_dns_mode);
         View layoutCredentials = activity.findViewById(R.id.layout_proxy_credentials);
         TextInputLayout tilUser = activity.findViewById(R.id.til_proxy_user);
+        TextInputLayout tilPass = activity.findViewById(R.id.til_proxy_pass);
+        TextInputLayout tilToken = activity.findViewById(R.id.til_proxy_token);
+        TextInputEditText etToken = activity.findViewById(R.id.et_proxy_token);
         TextInputLayout tilCustomDns = activity.findViewById(R.id.til_proxy_custom_dns);
         TextInputEditText etName = activity.findViewById(R.id.et_proxy_name);
         TextInputEditText etHost = activity.findViewById(R.id.et_proxy_host);
@@ -175,26 +179,44 @@ public class AddEditProxyActivityTest {
         TextInputEditText etCustomDns = activity.findViewById(R.id.et_proxy_custom_dns);
         View btnSave = activity.findViewById(R.id.btn_save_proxy);
 
-        // Verify dropdown adapters expose all 5 protocols, 2 auth methods, 4 DNS modes
-        assertEquals(5, actvProtocol.getAdapter().getCount());
-        assertEquals(2, actvAuth.getAdapter().getCount());
+        // Verify dropdown adapters expose 6 protocols, 5 auth methods, 4 DNS modes
+        // and default protocol when adding a new proxy is All Protocols
+        assertEquals(ProxyConfig.Protocol.ALL.getDisplayLabel(activity), actvProtocol.getText().toString());
+        assertEquals(6, actvProtocol.getAdapter().getCount());
+        assertEquals(5, actvAuth.getAdapter().getCount());
         assertEquals(4, actvDns.getAdapter().getCount());
 
         // Initially Auth = NONE (credentials hidden) and DNS = PROXY (custom DNS hidden)
         assertEquals(View.GONE, layoutCredentials.getVisibility());
         assertEquals(View.GONE, tilCustomDns.getVisibility());
 
-        // Switch Auth -> Username/Password shows credential fields & does NOT require username
-        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.USER_PASS);
+        // Switch Auth -> USER_PASS / HTTP_DIGEST shows user+pass, hides token, and requires credentials on save
+        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.HTTP_DIGEST);
         assertEquals(View.VISIBLE, layoutCredentials.getVisibility());
+        assertEquals(View.VISIBLE, tilUser.getVisibility());
+        assertEquals(View.VISIBLE, tilPass.getVisibility());
+        assertEquals(View.GONE, tilToken.getVisibility());
         etHost.setText("198.51.100.88");
         etPort.setText("1080");
-        assertNull(tilUser.getError());
+        btnSave.performClick();
+        assertNotNull(tilUser.getError());
+        assertFalse(activity.isFinishing());
 
-        // Switch Auth -> None hides credentials and clears error
+        // Switch Auth -> BEARER_TOKEN shows token field, hides user/pass, validates token on save
+        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.BEARER_TOKEN);
+        assertEquals(View.VISIBLE, layoutCredentials.getVisibility());
+        assertEquals(View.GONE, tilUser.getVisibility());
+        assertEquals(View.GONE, tilPass.getVisibility());
+        assertEquals(View.VISIBLE, tilToken.getVisibility());
+        btnSave.performClick();
+        assertNotNull(tilToken.getError());
+        assertFalse(activity.isFinishing());
+
+        // Switch Auth -> None hides credentials and clears errors
         activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.NONE);
         assertEquals(View.GONE, layoutCredentials.getVisibility());
         assertNull(tilUser.getError());
+        assertNull(tilToken.getError());
 
         // Switch DNS -> Cloudflare / Google keep custom DNS hidden; Custom shows it
         activity.applyDnsModeSelection(ProxyConfig.DnsMode.CLOUDFLARE);
@@ -209,9 +231,11 @@ public class AddEditProxyActivityTest {
         btnSave.performClick();
         assertNotNull(tilCustomDns.getError());
 
-        // Valid custom DNS + SOCKS5 + TLS protocol saves completely
+        // Valid Bearer token + custom DNS + SOCKS5_TLS persists completely
         activity.applyProtocolSelection(ProxyConfig.Protocol.SOCKS5_TLS);
+        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.BEARER_TOKEN);
         etName.setText("Tokyo TLS");
+        etToken.setText("tok_secret_99");
         etCustomDns.setText("9.9.9.9");
         btnSave.performClick();
 
@@ -229,7 +253,8 @@ public class AddEditProxyActivityTest {
                 found = true;
                 assertEquals("Tokyo TLS", p.getName());
                 assertEquals(ProxyConfig.Protocol.SOCKS5_TLS, p.getProtocol());
-                assertEquals(ProxyConfig.AuthMethod.NONE, p.getAuthMethod());
+                assertEquals(ProxyConfig.AuthMethod.BEARER_TOKEN, p.getAuthMethod());
+                assertEquals("tok_secret_99", p.getAuthToken());
                 assertEquals(ProxyConfig.DnsMode.CUSTOM, p.getDnsMode());
                 assertEquals("9.9.9.9", p.getCustomDns());
                 break;
@@ -314,5 +339,53 @@ public class AddEditProxyActivityTest {
         activity.applyTestFailureResult("Connection refused");
         assertNull(tilPort.getError());
         assertEquals(View.VISIBLE, cardStatus.getVisibility());
+    }
+
+    @Test
+    public void addEditProxyActivity_connectButtonDimmedUntilTestSucceeds_andAutoSelectsDetectedProtocol() {
+        try (org.robolectric.android.controller.ActivityController<AddEditProxyActivity> controller =
+                     Robolectric.buildActivity(AddEditProxyActivity.class).setup()) {
+            AddEditProxyActivity activity = controller.get();
+            android.widget.AutoCompleteTextView actvProtocol = activity.findViewById(R.id.actv_proxy_protocol);
+            TextInputEditText etHost = activity.findViewById(R.id.et_proxy_host);
+            TextInputEditText etPort = activity.findViewById(R.id.et_proxy_port);
+            android.widget.TextView tvResult = activity.findViewById(R.id.tv_test_connection_result);
+            View btnSaveAndConnect = activity.findViewById(R.id.btn_save_and_connect_proxy);
+
+            assertNotNull(btnSaveAndConnect);
+            assertFalse(btnSaveAndConnect.isEnabled());
+            assertTrue(btnSaveAndConnect.getAlpha() < 0.6f);
+
+            // Entering host & port alone leaves Connect disabled
+            etHost.setText("203.0.113.10");
+            etPort.setText("8080");
+            assertFalse(btnSaveAndConnect.isEnabled());
+            assertTrue(btnSaveAndConnect.getAlpha() < 0.6f);
+
+            // Failed test keeps Connect disabled
+            activity.applyTestFailureResult("Connection refused");
+            assertFalse(btnSaveAndConnect.isEnabled());
+
+            // Passing test lights up and enables Connect
+            activity.applyTestSuccessResult(42L, "203.0.113.10", ProxyConfig.Protocol.HTTP);
+            assertTrue(btnSaveAndConnect.isEnabled());
+            assertEquals(1.0f, btnSaveAndConnect.getAlpha(), 0.01f);
+
+            // Editing server field dims Connect again
+            etHost.setText("203.0.113.11");
+            assertFalse(btnSaveAndConnect.isEnabled());
+            assertTrue(btnSaveAndConnect.getAlpha() < 0.6f);
+
+            // Selecting All Protocols and getting a detected protocol updates dropdown & enables Connect
+            activity.applyProtocolSelection(ProxyConfig.Protocol.ALL);
+            assertFalse(btnSaveAndConnect.isEnabled());
+            activity.applyTestSuccessResult(25L, "198.51.100.5", ProxyConfig.Protocol.SOCKS5);
+            assertEquals("SOCKS5", actvProtocol.getText().toString());
+            assertTrue(tvResult.getText().toString().contains("SOCKS5"));
+            assertTrue(btnSaveAndConnect.isEnabled());
+            assertEquals(1.0f, btnSaveAndConnect.getAlpha(), 0.01f);
+        } finally {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+        }
     }
 }

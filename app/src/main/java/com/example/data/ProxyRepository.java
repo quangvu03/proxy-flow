@@ -47,8 +47,8 @@ public class ProxyRepository {
     private final MutableLiveData<List<FirewallRule>> firewallRulesLiveData = new MutableLiveData<>(new ArrayList<>());
     private final AtomicInteger batchEventSeq = new AtomicInteger(0);
 
-    private ProxyRepository(Context context) {
-        this.appContext = context.getApplicationContext();
+    private ProxyRepository(Context appContext) {
+        this.appContext = appContext;
         this.dbHelper = new ProxyDatabaseHelper(appContext);
         this.prefs = new SettingsPreferences(appContext);
         this.ioExecutor = Executors.newSingleThreadExecutor();
@@ -58,14 +58,32 @@ public class ProxyRepository {
     }
 
     public static ProxyRepository getInstance(Context context) {
-        if (instance == null) {
+        Context appCtx = context.getApplicationContext();
+        if (appCtx == null) {
+            appCtx = context;
+        }
+        ProxyRepository current = instance;
+        if (current == null || current.appContext != appCtx) {
             synchronized (ProxyRepository.class) {
-                if (instance == null) {
-                    instance = new ProxyRepository(context);
+                current = instance;
+                if (current == null || current.appContext != appCtx) {
+                    if (current != null) {
+                        current.shutdownInternal();
+                    }
+                    instance = new ProxyRepository(appCtx);
                 }
             }
         }
         return instance;
+    }
+
+    private void shutdownInternal() {
+        ioExecutor.shutdownNow();
+        testPool.shutdownNow();
+        try {
+            dbHelper.close();
+        } catch (Exception ignored) {
+        }
     }
 
     public LiveData<List<ProxyConfig>> getProxies() {
@@ -355,8 +373,12 @@ public class ProxyRepository {
     }
 
     public void addLog(ProxyLogEntry.Level level, String message) {
+        addLog(level, message, "", "");
+    }
+
+    public void addLog(ProxyLogEntry.Level level, String message, String packageName, String eventTag) {
         ioExecutor.execute(() -> {
-            dbHelper.insertLog(level, message);
+            dbHelper.insertLog(level, message, packageName, eventTag);
             logsLiveData.postValue(dbHelper.getRecentLogs());
         });
     }
@@ -374,6 +396,13 @@ public class ProxyRepository {
             ProxyTester.TestResult result = ProxyTester.testProxy(proxy, 8000);
             long now = System.currentTimeMillis();
             if (result.isSuccess()) {
+                if (proxy.getProtocol().isAutoDetect() && result.getDetectedProtocol() != null) {
+                    proxy.setProtocol(result.getDetectedProtocol());
+                    dbHelper.updateProxyProtocol(proxy.getId(), result.getDetectedProtocol());
+                    dbHelper.insertLog(ProxyLogEntry.Level.INFO,
+                            ProxyLogFormatter.getString(appContext, R.string.log_protocol_auto_detected,
+                                    proxy.getAddressDisplay(), result.getDetectedProtocol().getDisplayLabel()));
+                }
                 dbHelper.updateProxyTelemetry(
                         proxy.getId(),
                         result.getLatencyMs(),
@@ -425,6 +454,10 @@ public class ProxyRepository {
                         long now = System.currentTimeMillis();
                         if (res.isSuccess()) {
                             okCount.incrementAndGet();
+                            if (p.getProtocol().isAutoDetect() && res.getDetectedProtocol() != null) {
+                                p.setProtocol(res.getDetectedProtocol());
+                                dbHelper.updateProxyProtocol(p.getId(), res.getDetectedProtocol());
+                            }
                             dbHelper.updateProxyTelemetry(
                                     p.getId(), res.getLatencyMs(), res.getExitIp(), res.getCountry(), now, 0);
                         } else {
@@ -483,6 +516,11 @@ public class ProxyRepository {
 
     public void updateTelemetrySync(long proxyId, long latencyMs, String exitIp, String country, int failCount) {
         dbHelper.updateProxyTelemetry(proxyId, latencyMs, exitIp, country, System.currentTimeMillis(), failCount);
+        refreshInternal();
+    }
+
+    public void updateProxyProtocolSync(long proxyId, ProxyConfig.Protocol protocol) {
+        dbHelper.updateProxyProtocol(proxyId, protocol);
         refreshInternal();
     }
 

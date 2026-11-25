@@ -31,6 +31,10 @@
         android:theme="@style/Theme.ProxyFlow"
         android:usesCleartextTraffic="true">
 
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4297682558932045~6174032153" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

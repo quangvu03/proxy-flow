@@ -60,6 +60,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
     private final AtomicBoolean fullTestRunning = new AtomicBoolean(false);
     private final AtomicBoolean speedTestRunning = new AtomicBoolean(false);
 
+    private MaterialToolbar toolbar;
     private MaterialCardView cardVerdict;
     private ImageView ivVerdictIcon;
     private TextView tvVerdictTitle;
@@ -97,7 +98,7 @@ public class ProxyDetailActivity extends AppCompatActivity {
 
         repository = ProxyRepository.getInstance(this);
 
-        MaterialToolbar toolbar = findViewById(R.id.detail_toolbar);
+        toolbar = findViewById(R.id.detail_toolbar);
         toolbar.setNavigationOnClickListener(v -> finish());
 
         View root = findViewById(R.id.detail_root);
@@ -208,8 +209,15 @@ public class ProxyDetailActivity extends AppCompatActivity {
             try {
                 // 1. Technical Diagnostics (TCP + Auth + HTTPS Tunnel)
                 ProxySpeedTester.DiagnosticResult diag = ProxySpeedTester.runDiagnostics(proxy);
+                if (proxy.getProtocol().isAutoDetect() && diag.getDetectedProtocol() != null) {
+                    proxy.setProtocol(diag.getDetectedProtocol());
+                    repository.updateProxyProtocolSync(proxy.getId(), diag.getDetectedProtocol());
+                }
                 if (isFinishing() || isDestroyed()) return;
-                runOnUiThread(() -> renderDiagnostics(diag));
+                runOnUiThread(() -> {
+                    toolbar.setSubtitle(proxy.getSchemePrefix() + proxy.getAddressDisplay());
+                    renderDiagnostics(diag);
+                });
 
                 if (!diag.isUsable()) {
                     repository.updateTelemetrySync(proxy.getId(), ProxyConfig.LATENCY_FAILED,
@@ -307,6 +315,10 @@ public class ProxyDetailActivity extends AppCompatActivity {
             case NOT_REQUIRED:
                 setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_none),
                         R.color.status_connected, R.color.status_connected_bg);
+                break;
+            case REQUIRED:
+                setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_required),
+                        R.color.status_error, R.color.status_error_bg);
                 break;
             case FAILED_407:
                 setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_failed),

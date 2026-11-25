@@ -2,6 +2,7 @@ package com.example.ui;
 
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -19,6 +20,7 @@ import com.example.model.AppProxyRule;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.progressindicator.CircularProgressIndicator;
 
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +45,8 @@ public class ConnectFragment extends Fragment {
     private TextView tvLocalGateway;
     private TextView tvConnectionError;
     private MaterialButton btnToggleVpn;
+    private View layoutConnectLoading;
+    private CircularProgressIndicator progressConnectVpn;
     private MaterialButton btnOpenIpMap;
     private MaterialButton btnTestActive;
     private TextView tvExitIpValue;
@@ -79,6 +83,8 @@ public class ConnectFragment extends Fragment {
         tvLocalGateway = view.findViewById(R.id.tv_local_gateway);
         tvConnectionError = view.findViewById(R.id.tv_connection_error);
         btnToggleVpn = view.findViewById(R.id.btn_toggle_vpn);
+        layoutConnectLoading = view.findViewById(R.id.layout_connect_loading);
+        progressConnectVpn = view.findViewById(R.id.progress_connect_vpn);
         btnOpenIpMap = view.findViewById(R.id.btn_open_ip_map);
         btnTestActive = view.findViewById(R.id.btn_test_active);
         tvExitIpValue = view.findViewById(R.id.tv_exit_ip_value);
@@ -158,7 +164,11 @@ public class ConnectFragment extends Fragment {
                 tvStatusBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_connected));
                 tvStatusBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_connected_bg)));
+                if (layoutConnectLoading != null) {
+                    layoutConnectLoading.setVisibility(View.GONE);
+                }
                 btnToggleVpn.setEnabled(true);
+                btnToggleVpn.setIconResource(R.drawable.ic_power);
                 btnToggleVpn.setText(R.string.action_disconnect);
                 btnToggleVpn.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_error)));
@@ -171,8 +181,17 @@ public class ConnectFragment extends Fragment {
                 tvStatusBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_switching));
                 tvStatusBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.status_switching_bg)));
-                btnToggleVpn.setEnabled(true);
-                btnToggleVpn.setText(R.string.action_disconnect);
+                btnToggleVpn.setEnabled(false);
+                btnToggleVpn.setIcon(null);
+                btnToggleVpn.setText(R.string.action_connecting);
+                btnToggleVpn.setBackgroundTintList(ColorStateList.valueOf(0xFF0D9488));
+                btnToggleVpn.setTextColor(Color.TRANSPARENT);
+                if (layoutConnectLoading != null) {
+                    layoutConnectLoading.setVisibility(View.VISIBLE);
+                }
+                if (progressConnectVpn != null) {
+                    progressConnectVpn.setVisibility(View.VISIBLE);
+                }
                 break;
 
             case ERROR:
@@ -211,7 +230,7 @@ public class ConnectFragment extends Fragment {
             tvActiveTitle.setText(proxy.getDisplayTitle());
             tvActiveAddress.setText(proxy.getSchemePrefix() + proxy.getAddressDisplay());
             tvExitIpValue.setText(proxy.getExitIp().isEmpty() ? "—" : proxy.getExitIp());
-            tvAuthValue.setText(proxy.hasAuth() ? proxy.getUsername() : getString(R.string.badge_auth_no));
+            tvAuthValue.setText(proxy.getAuthDisplaySummary(requireContext()));
 
             long lat = proxy.getLatencyMs();
             if (lat > 0) {
@@ -242,7 +261,11 @@ public class ConnectFragment extends Fragment {
     }
 
     private void resetConnectButton() {
+        if (layoutConnectLoading != null) {
+            layoutConnectLoading.setVisibility(View.GONE);
+        }
         btnToggleVpn.setEnabled(true);
+        btnToggleVpn.setIconResource(R.drawable.ic_power);
         btnToggleVpn.setText(R.string.action_connect);
         btnToggleVpn.setBackgroundTintList(ColorStateList.valueOf(0xFF14B8A6));
         btnToggleVpn.setTextColor(0xFF042F2E);

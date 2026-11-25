@@ -34,6 +34,8 @@ import java.net.Socket;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -47,13 +49,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Android VpnService that establishes a system-level proxy tunnel backed by
- * LocalProxyServer using a fixed user-selected HTTP proxy (with user/pass auth).
+ * LocalProxyServer using a fixed user-selected proxy.
  * Never switches or rotates proxies automatically; proxy changes occur only on
  * explicit user action. Supports per-app allowlist / blocklist routing, firewall
- * app-blocking rules, and private network IP routing through the upstream proxy.
+ * app-blocking rules, private network routing, and full DNS/traffic process logging.
  */
 public class ProxyVpnService extends VpnService
-        implements LocalProxyServer.EventListener, LocalProxyServer.PolicyChecker {
+        implements LocalProxyServer.EventListener, LocalProxyServer.PolicyChecker, LocalProxyServer.TrafficListener {
 
     public static final String ACTION_START = "com.example.action.START_VPN";
     public static final String ACTION_STOP = "com.example.action.STOP_VPN";
@@ -67,6 +69,8 @@ public class ProxyVpnService extends VpnService
     private static final long FAILURE_LOG_THROTTLE_MS = 15_000L;
     private static final long NETWORK_LOST_GRACE_MS = 2_500L;
     private static final int AUTO_STOP_CONSECUTIVE_FAILURES = 2;
+    private static final int FATAL_UPSTREAM_AUTO_DISCONNECT_FAILURES = 3;
+    private static final int CONNECT_VERIFY_TIMEOUT_MS = 6_000;
     private static final int HEALTH_CHECK_INTERVAL_SECONDS = 15;
     private static final long HEALTH_CHECK_IDLE_THRESHOLD_MS = 20_000L;
     private static final int HEALTH_PROBE_TIMEOUT_MS = 4_000;
@@ -82,17 +86,20 @@ public class ProxyVpnService extends VpnService
     private Thread tunDrainThread;
     private ScheduledExecutorService scheduler;
     private ExecutorService healthProbeExecutor;
+    private final ExecutorService serviceControlExecutor = Executors.newSingleThreadExecutor();
     private volatile ScheduledFuture<?> pendingNetworkLostFuture;
 
     private final Set<Network> availableUnderlyingNetworks = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopping = new AtomicBoolean(false);
+    private final AtomicBoolean switchingProxy = new AtomicBoolean(false);
     private final AtomicBoolean healthProbeInFlight = new AtomicBoolean(false);
     private final AtomicInteger consecutiveUpstreamFailures = new AtomicInteger(0);
     private final AtomicInteger healthProbeFailures = new AtomicInteger(0);
     private final AtomicInteger telemetryTickCounter = new AtomicInteger(0);
     private final AtomicLong lastFailureLogMs = new AtomicLong(0L);
     private final AtomicLong lastUpstreamSuccessMs = new AtomicLong(0L);
+    private final Map<String, Long> recentTrafficDedupeMs = new ConcurrentHashMap<>();
 
     private volatile long connectedSinceMs = 0L;
     private volatile long vpnTimerDeadlineMs = 0L;
@@ -164,6 +171,7 @@ public class ProxyVpnService extends VpnService
         localProxyServer = new LocalProxyServer();
         localProxyServer.setEventListener(this);
         localProxyServer.setPolicyChecker(this);
+        localProxyServer.setTrafficListener(this);
         refreshPolicySnapshots();
         ProxyNotificationManager.ensureChannels(this);
     }
@@ -225,72 +233,128 @@ public class ProxyVpnService extends VpnService
     }
 
     private void startTunnelAsync(long requestedProxyId) {
-        Executors.newSingleThreadExecutor().execute(() -> {
-            ProxyConfig chosen = requestedProxyId > 0
-                    ? repository.getProxyByIdSync(requestedProxyId)
-                    : repository.getActiveProxySync();
-            if (chosen == null) {
-                chosen = repository.getActiveProxySync();
-            }
-            if (chosen == null) {
-                repository.addLog(ProxyLogEntry.Level.ERROR,
-                        ProxyLogFormatter.getString(this, R.string.log_vpn_no_proxy));
-                stopTunnelAndService(ProxyLogFormatter.getString(this, R.string.msg_no_proxy_to_connect));
-                return;
-            }
+        if (serviceControlExecutor.isShutdown()) return;
+        serviceControlExecutor.execute(() -> startTunnelInternal(requestedProxyId));
+    }
 
-            activeProxy = chosen;
-            stopping.set(false);
-            consecutiveUpstreamFailures.set(0);
-            healthProbeFailures.set(0);
-            telemetryTickCounter.set(0);
+    private void startTunnelInternal(long requestedProxyId) {
+        ProxyConfig chosen = requestedProxyId > 0
+                ? repository.getProxyByIdSync(requestedProxyId)
+                : repository.getActiveProxySync();
+        if (chosen == null) {
+            chosen = repository.getActiveProxySync();
+        }
+        if (chosen == null) {
+            repository.addLog(ProxyLogEntry.Level.ERROR,
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_no_proxy));
+            stopTunnelAndService(ProxyLogFormatter.getString(this, R.string.msg_no_proxy_to_connect));
+            return;
+        }
+
+        activeProxy = chosen;
+        stopping.set(false);
+        consecutiveUpstreamFailures.set(0);
+        healthProbeFailures.set(0);
+        telemetryTickCounter.set(0);
+        lastUpstreamSuccessMs.set(System.currentTimeMillis());
+
+        runtimeManager.postStatus(new ConnectionStatus(
+                ConnectionStatus.State.CONNECTING,
+                chosen,
+                0,
+                0L,
+                0L,
+                0,
+                "",
+                0L
+        ));
+
+        repository.markActiveProxySync(chosen.getId());
+
+        ProxyConfig verifiedProxy = verifyAndResolveProxyOnConnect(chosen);
+        if (verifiedProxy == null) {
+            return;
+        }
+        activeProxy = verifiedProxy;
+
+        try {
+            int localPort = localProxyServer.start(verifiedProxy);
+            establishVpnInterface(verifiedProxy, localPort);
+            connectedSinceMs = System.currentTimeMillis();
+            applyConfiguredVpnTimer(connectedSinceMs, false);
+            isRunning.set(true);
+            updateNotification();
+            registerNetworkMonitor();
+            startTelemetryTicker();
+
+            repository.addLog(ProxyLogEntry.Level.SUCCESS,
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_connected,
+                            verifiedProxy.getAddressDisplay(), localPort),
+                    getPackageName(), "VPN");
+            if (activeVpnTimerMinutes > 0) {
+                repository.addLog(ProxyLogEntry.Level.INFO,
+                        ProxyLogFormatter.getString(this, R.string.log_vpn_timer_set,
+                                formatTimerMinutes(activeVpnTimerMinutes)),
+                        getPackageName(), "VPN");
+            }
+            ProxyNotificationManager.notifyVpnConnected(this, verifiedProxy, activeVpnTimerMinutes);
             lastUpstreamSuccessMs.set(System.currentTimeMillis());
 
-            runtimeManager.postStatus(new ConnectionStatus(
-                    ConnectionStatus.State.CONNECTING,
-                    chosen,
-                    0,
-                    0L,
-                    0L,
-                    0,
-                    "",
-                    0L
-            ));
+            publishStatus(ConnectionStatus.State.CONNECTED, "");
+            updateNotification();
+        } catch (Exception e) {
+            String msg = e.getMessage() != null
+                    ? e.getMessage()
+                    : ProxyLogFormatter.getString(this, R.string.log_vpn_interface_failed);
+            repository.addLog(ProxyLogEntry.Level.ERROR,
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_error, msg),
+                    getPackageName(), "ERROR");
+            stopTunnelAndService(msg);
+        }
+    }
 
-            repository.markActiveProxySync(chosen.getId());
+    private ProxyConfig verifyAndResolveProxyOnConnect(ProxyConfig chosen) {
+        ProxyTester.TestResult result = ProxyTester.testProxy(chosen, CONNECT_VERIFY_TIMEOUT_MS);
+        if (stopping.get()) {
+            return null;
+        }
+        if (!result.isSuccess()) {
+            String reason = !result.getErrorMessage().isEmpty()
+                    ? result.getErrorMessage()
+                    : ProxyLogFormatter.getString(this, R.string.latency_failed);
+            repository.updateTelemetrySync(
+                    chosen.getId(),
+                    ProxyConfig.LATENCY_FAILED,
+                    chosen.getExitIp(),
+                    chosen.getCountry(),
+                    chosen.getFailCount() + 1
+            );
+            repository.addLog(ProxyLogEntry.Level.ERROR,
+                    ProxyLogFormatter.getString(this, R.string.log_proxy_connect_refused,
+                            chosen.getAddressDisplay(), reason),
+                    getPackageName(), "ERROR");
+            String errMsg = ProxyLogFormatter.getString(
+                    this, R.string.msg_proxy_connect_blocked_error, chosen.getAddressDisplay(), reason);
+            stopTunnelAndService(errMsg, null, true);
+            return null;
+        }
 
-            try {
-                int localPort = localProxyServer.start(chosen);
-                establishVpnInterface(chosen, localPort);
-                connectedSinceMs = System.currentTimeMillis();
-                applyConfiguredVpnTimer(connectedSinceMs, false);
-                isRunning.set(true);
-                updateNotification();
-                registerNetworkMonitor();
-                startTelemetryTicker();
-
-                repository.addLog(ProxyLogEntry.Level.SUCCESS,
-                        ProxyLogFormatter.getString(this, R.string.log_vpn_connected,
-                                chosen.getAddressDisplay(), localPort));
-                if (activeVpnTimerMinutes > 0) {
-                    repository.addLog(ProxyLogEntry.Level.INFO,
-                            ProxyLogFormatter.getString(this, R.string.log_vpn_timer_set,
-                                    formatTimerMinutes(activeVpnTimerMinutes)));
-                }
-                ProxyNotificationManager.notifyVpnConnected(this, chosen, activeVpnTimerMinutes);
-                lastUpstreamSuccessMs.set(System.currentTimeMillis());
-
-                publishStatus(ConnectionStatus.State.CONNECTED, "");
-                updateNotification();
-            } catch (Exception e) {
-                String msg = e.getMessage() != null
-                        ? e.getMessage()
-                        : ProxyLogFormatter.getString(this, R.string.log_vpn_interface_failed);
-                repository.addLog(ProxyLogEntry.Level.ERROR,
-                        ProxyLogFormatter.getString(this, R.string.log_vpn_error, msg));
-                stopTunnelAndService(msg);
-            }
-        });
+        if (chosen.getProtocol().isAutoDetect() && result.getDetectedProtocol() != null) {
+            chosen.setProtocol(result.getDetectedProtocol());
+            repository.updateProxyProtocolSync(chosen.getId(), result.getDetectedProtocol());
+            repository.addLog(ProxyLogEntry.Level.INFO,
+                    ProxyLogFormatter.getString(this, R.string.log_protocol_auto_detected,
+                            chosen.getAddressDisplay(), result.getDetectedProtocol().getDisplayLabel()),
+                    getPackageName(), "PROXY");
+        }
+        String exitIp = !result.getExitIp().isEmpty() ? result.getExitIp() : chosen.getExitIp();
+        String country = !result.getCountry().isEmpty() ? result.getCountry() : chosen.getCountry();
+        chosen.setLatencyMs(result.getLatencyMs());
+        chosen.setExitIp(exitIp);
+        chosen.setCountry(country);
+        chosen.setFailCount(0);
+        repository.updateTelemetrySync(chosen.getId(), result.getLatencyMs(), exitIp, country, 0);
+        return chosen;
     }
 
     private void establishVpnInterface(ProxyConfig proxy, int localPort) throws IOException {
@@ -345,6 +409,7 @@ public class ProxyVpnService extends VpnService
                 while (isRunning.get() && tunInterface != null) {
                     int read = fis.read(packet);
                     if (read < 0) break;
+                    inspectTunPacket(packet, read);
                 }
             } catch (IOException ignored) {
             }
@@ -369,8 +434,10 @@ public class ProxyVpnService extends VpnService
                             ProxyLogFormatter.getString(this, R.string.log_vpn_timer_expired, durationLabel), false);
                     return;
                 }
-                publishStatus(ConnectionStatus.State.CONNECTED, "");
-                updateNotification();
+                if (!switchingProxy.get()) {
+                    publishStatus(ConnectionStatus.State.CONNECTED, "");
+                    updateNotification();
+                }
                 int tick = telemetryTickCounter.incrementAndGet();
                 if (tick % HEALTH_CHECK_INTERVAL_SECONDS == 0 && isAutoStopEnabled()) {
                     runDisconnectHealthCheck();
@@ -381,14 +448,35 @@ public class ProxyVpnService extends VpnService
     }
 
     private void switchToSpecificProxyAsync(long targetId) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        if (serviceControlExecutor.isShutdown()) return;
+        serviceControlExecutor.execute(() -> {
             ProxyConfig target = repository.getProxyByIdSync(targetId);
             if (target == null) return;
             if (!isRunning.get()) {
-                startTunnelAsync(targetId);
+                startTunnelInternal(targetId);
                 return;
             }
-            applyManualProxyChange(target);
+            stopping.set(false);
+            switchingProxy.set(true);
+            try {
+                runtimeManager.postStatus(new ConnectionStatus(
+                        ConnectionStatus.State.CONNECTING,
+                        target,
+                        localProxyServer != null ? localProxyServer.getLocalPort() : 0,
+                        localProxyServer != null ? localProxyServer.getBytesIn() : 0L,
+                        localProxyServer != null ? localProxyServer.getBytesOut() : 0L,
+                        localProxyServer != null ? localProxyServer.getActiveConnections() : 0,
+                        "",
+                        connectedSinceMs
+                ));
+                ProxyConfig verified = verifyAndResolveProxyOnConnect(target);
+                if (verified == null || !isRunning.get()) {
+                    return;
+                }
+                applyManualProxyChange(verified);
+            } finally {
+                switchingProxy.set(false);
+            }
         });
     }
 
@@ -465,7 +553,8 @@ public class ProxyVpnService extends VpnService
     }
 
     private void reapplyPoliciesAsync() {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        if (serviceControlExecutor.isShutdown()) return;
+        serviceControlExecutor.execute(() -> {
             refreshPolicySnapshots();
             if (!isRunning.get() || activeProxy == null) return;
             try {
@@ -478,7 +567,8 @@ public class ProxyVpnService extends VpnService
     }
 
     private void reapplyAppRulesAsync() {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        if (serviceControlExecutor.isShutdown()) return;
+        serviceControlExecutor.execute(() -> {
             if (!isRunning.get() || activeProxy == null) return;
             try {
                 establishVpnInterface(activeProxy, localProxyServer.getLocalPort());
@@ -503,7 +593,8 @@ public class ProxyVpnService extends VpnService
         localProxyServer.setActiveProxy(nextProxy);
         repository.markActiveProxySync(nextProxy.getId());
         repository.addLog(ProxyLogEntry.Level.SUCCESS,
-                ProxyLogFormatter.getString(this, R.string.log_vpn_proxy_switched, nextProxy.getAddressDisplay()));
+                ProxyLogFormatter.getString(this, R.string.log_vpn_proxy_switched, nextProxy.getAddressDisplay()),
+                getPackageName(), "PROXY");
         publishStatus(ConnectionStatus.State.CONNECTED, "");
         updateNotification();
     }
@@ -552,15 +643,20 @@ public class ProxyVpnService extends VpnService
         ProxyConfig current = activeProxy != null ? activeProxy : repository.getActiveProxySync();
         runtimeManager.postDisconnected(current, errorMsg);
         if (customDisconnectLog != null && !customDisconnectLog.isEmpty()) {
-            repository.addLog(ProxyLogEntry.Level.WARN, customDisconnectLog);
+            repository.addLog(ProxyLogEntry.Level.WARN, customDisconnectLog, getPackageName(), "VPN");
             if (notifyDisconnectEvent) {
                 ProxyNotificationManager.notifyVpnDisconnected(this, customDisconnectLog, true);
             }
         } else if (errorMsg == null || errorMsg.isEmpty()) {
             repository.addLog(ProxyLogEntry.Level.INFO,
-                    ProxyLogFormatter.getString(this, R.string.log_vpn_disconnected));
+                    ProxyLogFormatter.getString(this, R.string.log_vpn_disconnected),
+                    getPackageName(), "VPN");
             if (notifyDisconnectEvent) {
                 ProxyNotificationManager.notifyVpnDisconnected(this, null, false);
+            }
+        } else {
+            if (notifyDisconnectEvent) {
+                ProxyNotificationManager.notifyVpnDisconnected(this, errorMsg, true);
             }
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -568,10 +664,14 @@ public class ProxyVpnService extends VpnService
     }
 
     private void autoStopOnDisconnect(String logMessage) {
+        autoStopOnDisconnect(logMessage, "");
+    }
+
+    private void autoStopOnDisconnect(String logMessage, String errorMsg) {
         if (!isRunning.get()) {
             return;
         }
-        stopTunnelAndService("", logMessage, true);
+        stopTunnelAndService(errorMsg, logMessage, true);
     }
 
     private boolean isAutoStopEnabled() {
@@ -756,13 +856,202 @@ public class ProxyVpnService extends VpnService
                     }
                 }
                 if (matchesApp && fwRule.matchesTarget(targetHost, targetPort)) {
-                    logFirewallBlock(callerPackages != null && callerPackages.length > 0 ? callerPackages[0] : fwRule.getName(),
+                    String callerPkg = (callerPackages != null && callerPackages.length > 0)
+                            ? callerPackages[0]
+                            : "";
+                    logFirewallBlock(
+                            !callerPkg.isEmpty() ? callerPkg : fwRule.getName(),
+                            callerPkg,
                             targetHost + ":" + targetPort);
                     return LocalProxyServer.PolicyResult.BLOCK_FIREWALL;
                 }
             }
         }
         return LocalProxyServer.PolicyResult.ALLOW;
+    }
+
+    @Override
+    public String resolveCallerPackage(Socket clientSocket) {
+        String[] pkgs = resolveCallerPackages(clientSocket);
+        if (pkgs != null && pkgs.length > 0 && pkgs[0] != null) {
+            return pkgs[0];
+        }
+        return "";
+    }
+
+    @Override
+    public void onDnsDomainRequested(String callerPackage, String domain) {
+        if (repository == null || domain == null || domain.isEmpty()) return;
+        String key = "DNS|" + domain.toLowerCase(Locale.ROOT);
+        if (shouldEmitDeduplicated(key, 1500L)) {
+            String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+            repository.addLog(
+                    ProxyLogEntry.Level.INFO,
+                    ProxyLogFormatter.getString(this, R.string.log_dns_query, "A", domain),
+                    pkg,
+                    "DNS"
+            );
+        }
+    }
+
+    @Override
+    public void onSendStarted(String callerPackage, String methodTag, String target, ProxyConfig proxy) {
+        if (repository == null || target == null || target.isEmpty() || proxy == null) return;
+        String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+        String route = proxy.getSchemePrefix() + proxy.getAddressDisplay();
+        repository.addLog(
+                ProxyLogEntry.Level.INFO,
+                ProxyLogFormatter.getString(this, R.string.log_traffic_send_request, methodTag, target, route),
+                pkg,
+                methodTag
+        );
+    }
+
+    @Override
+    public void onTunnelEstablished(String callerPackage, String methodTag, String target, long handshakeMs) {
+        if (repository == null || target == null || target.isEmpty()) return;
+        String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+        repository.addLog(
+                ProxyLogEntry.Level.SUCCESS,
+                ProxyLogFormatter.getString(this, R.string.log_traffic_tunnel_ready, methodTag, target, handshakeMs),
+                pkg,
+                "SEND"
+        );
+    }
+
+    @Override
+    public void onTransferCompleted(String callerPackage, String target,
+                                    long sentBytes, long recvBytes, long durationMs) {
+        if (repository == null || target == null || target.isEmpty()) return;
+        String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+        repository.addLog(
+                ProxyLogEntry.Level.SUCCESS,
+                ProxyLogFormatter.getString(this, R.string.log_traffic_transfer_done,
+                        target, formatByteCount(sentBytes), formatByteCount(recvBytes), durationMs),
+                pkg,
+                "DONE"
+        );
+    }
+
+    @Override
+    public void onSendFailed(String callerPackage, String methodTag, String target, String reason) {
+        if (repository == null || target == null || target.isEmpty()) return;
+        String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+        repository.addLog(
+                ProxyLogEntry.Level.ERROR,
+                ProxyLogFormatter.getString(this, R.string.log_traffic_send_failed, methodTag, target,
+                        reason != null ? reason : ""),
+                pkg,
+                "ERROR"
+        );
+    }
+
+    @Override
+    public void onRequestBlocked(String callerPackage, LocalProxyServer.PolicyResult reason, String target) {
+        if (repository == null || target == null || target.isEmpty()) return;
+        if (reason == LocalProxyServer.PolicyResult.BLOCK_PRIVATE_ROUTING_DISABLED) {
+            String pkg = (callerPackage != null && !callerPackage.isEmpty()) ? callerPackage : getPackageName();
+            repository.addLog(
+                    ProxyLogEntry.Level.WARN,
+                    ProxyLogFormatter.getString(this, R.string.log_traffic_private_blocked, target),
+                    pkg,
+                    "BLOCK"
+            );
+        }
+    }
+
+    private void inspectTunPacket(byte[] packet, int length) {
+        TunPacketParser.ParsedPacket parsed = TunPacketParser.parse(packet, length);
+        if (parsed == null || repository == null) {
+            return;
+        }
+        String pkg = resolveCallerPackageForPacket(parsed);
+        if (pkg.isEmpty()) {
+            pkg = getPackageName();
+        }
+        switch (parsed.getKind()) {
+            case DNS_QUERY: {
+                String domain = parsed.getDnsDomain();
+                String key = "DNS|" + domain.toLowerCase(Locale.ROOT);
+                if (shouldEmitDeduplicated(key, 1500L)) {
+                    repository.addLog(
+                            ProxyLogEntry.Level.INFO,
+                            ProxyLogFormatter.getString(this, R.string.log_dns_query,
+                                    parsed.getDnsRecordType(), domain),
+                            pkg,
+                            "DNS"
+                    );
+                }
+                break;
+            }
+            case TCP_SYN: {
+                String target = parsed.getDstIp() + ":" + parsed.getDstPort();
+                if (shouldEmitDeduplicated("TCP|" + pkg + "|" + target, 1500L)) {
+                    repository.addLog(
+                            ProxyLogEntry.Level.INFO,
+                            ProxyLogFormatter.getString(this, R.string.log_traffic_tcp_syn, target),
+                            pkg,
+                            "TCP"
+                    );
+                }
+                break;
+            }
+            case UDP_PACKET: {
+                String target = parsed.getDstIp() + ":" + parsed.getDstPort();
+                if (shouldEmitDeduplicated("UDP|" + pkg + "|" + target, 3000L)) {
+                    repository.addLog(
+                            ProxyLogEntry.Level.INFO,
+                            ProxyLogFormatter.getString(this, R.string.log_traffic_udp_packet,
+                                    target, parsed.getPayloadBytes()),
+                            pkg,
+                            "UDP"
+                    );
+                }
+                break;
+            }
+        }
+    }
+
+    private boolean shouldEmitDeduplicated(String key, long windowMs) {
+        long now = System.currentTimeMillis();
+        if (recentTrafficDedupeMs.size() > 256) {
+            recentTrafficDedupeMs.entrySet().removeIf(e -> now - e.getValue() > 10_000L);
+        }
+        Long prev = recentTrafficDedupeMs.get(key);
+        if (prev != null && (now - prev) < windowMs) {
+            return false;
+        }
+        recentTrafficDedupeMs.put(key, now);
+        return true;
+    }
+
+    private String resolveCallerPackageForPacket(TunPacketParser.ParsedPacket parsed) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || connectivityManager == null || parsed == null) {
+            return "";
+        }
+        try {
+            InetSocketAddress src = new InetSocketAddress(parsed.getSrcIp(), parsed.getSrcPort());
+            InetSocketAddress dst = new InetSocketAddress(parsed.getDstIp(), parsed.getDstPort());
+            int uid = connectivityManager.getConnectionOwnerUid(parsed.getProtocol(), src, dst);
+            if (uid > 0) {
+                String[] pkgs = getPackageManager().getPackagesForUid(uid);
+                if (pkgs != null && pkgs.length > 0 && pkgs[0] != null) {
+                    return pkgs[0];
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private static String formatByteCount(long bytes) {
+        if (bytes < 1024L) {
+            return bytes + " B";
+        }
+        if (bytes < 1024L * 1024L) {
+            return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        }
+        return String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
     }
 
     private String[] resolveCallerPackages(Socket clientSocket) {
@@ -784,12 +1073,14 @@ public class ProxyVpnService extends VpnService
         return null;
     }
 
-    private void logFirewallBlock(String appOrRule, String destination) {
+    private void logFirewallBlock(String appOrRule, String callerPackage, String destination) {
         long now = System.currentTimeMillis();
         long prev = lastFirewallBlockLogMs.get();
         if (now - prev >= 5_000L && lastFirewallBlockLogMs.compareAndSet(prev, now)) {
             repository.addLog(ProxyLogEntry.Level.WARN,
-                    ProxyLogFormatter.getString(this, R.string.log_firewall_blocked_request, appOrRule, destination));
+                    ProxyLogFormatter.getString(this, R.string.log_firewall_blocked_request, appOrRule, destination),
+                    callerPackage != null ? callerPackage : getPackageName(),
+                    "FW");
         }
         ProxyNotificationManager.notifyFirewallBlocked(this, appOrRule, destination);
     }
@@ -808,15 +1099,24 @@ public class ProxyVpnService extends VpnService
         if (!isRunning.get() || activeProxy == null || activeProxy.getId() != proxyId) {
             return;
         }
-        if (isAutoStopEnabled()) {
-            int failures = consecutiveUpstreamFailures.incrementAndGet();
-            if (failures >= AUTO_STOP_CONSECUTIVE_FAILURES) {
-                autoStopOnDisconnect(ProxyLogFormatter.getString(this, R.string.log_auto_stop_proxy_lost,
-                        activeProxy.getAddressDisplay(), reason));
-                return;
-            }
+        int failures = consecutiveUpstreamFailures.incrementAndGet();
+        int threshold = isAutoStopEnabled()
+                ? AUTO_STOP_CONSECUTIVE_FAILURES
+                : FATAL_UPSTREAM_AUTO_DISCONNECT_FAILURES;
+        if (failures >= threshold) {
+            repository.updateTelemetrySync(
+                    activeProxy.getId(),
+                    ProxyConfig.LATENCY_FAILED,
+                    activeProxy.getExitIp(),
+                    activeProxy.getCountry(),
+                    activeProxy.getFailCount() + 1
+            );
+            String disconnectMsg = ProxyLogFormatter.getString(
+                    this, R.string.log_auto_stop_proxy_lost, activeProxy.getAddressDisplay(), reason);
+            autoStopOnDisconnect(disconnectMsg, disconnectMsg);
+            return;
         }
-        // Log throttled warning only; never switch or rotate the user's selected proxy
+        // Log throttled warning while below auto-disconnect threshold
         long now = System.currentTimeMillis();
         long prev = lastFailureLogMs.get();
         if (now - prev >= FAILURE_LOG_THROTTLE_MS && lastFailureLogMs.compareAndSet(prev, now)) {
@@ -836,6 +1136,7 @@ public class ProxyVpnService extends VpnService
     public void onDestroy() {
         unregisterNetworkMonitor();
         stopScheduler();
+        serviceControlExecutor.shutdownNow();
         if (localProxyServer != null) {
             localProxyServer.stop();
         }

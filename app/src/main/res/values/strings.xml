@@ -19,6 +19,7 @@
 
     <!-- Dashboard -->
     <string name="action_connect">Kết nối Proxy</string>
+    <string name="action_connecting">Đang kết nối…</string>
     <string name="action_disconnect">Ngắt kết nối</string>
     <string name="action_test_active">Kiểm tra tốc độ</string>
     <string name="label_active_proxy">Proxy đang chọn</string>
@@ -50,6 +51,9 @@
     <string name="empty_proxy_title">Danh sách Proxy đang trống</string>
     <string name="empty_proxy_subtitle">Thêm Proxy HTTP (host, port, user, pass) hoặc nhập hàng loạt để lưu trữ và tự chọn kết nối cố định.</string>
     <string name="badge_auth_yes">User/Pass</string>
+    <string name="badge_auth_basic">HTTP Basic</string>
+    <string name="badge_auth_digest">HTTP Digest</string>
+    <string name="badge_auth_token">Bearer Token</string>
     <string name="badge_auth_no">Không Auth</string>
     <string name="badge_active_now">Đang dùng</string>
     <string name="latency_untested">Chưa đo</string>
@@ -67,13 +71,18 @@
     <string name="label_quick_paste_tip">Hỗ trợ dán nhanh ip:port:user:pass hoặc socks5://user:pass@ip:port</string>
     <string name="hint_proxy_name">Tên cấu hình (VD: US East 1)</string>
     <string name="label_proxy_protocol">Giao thức</string>
+    <string name="protocol_all">Tất cả giao thức</string>
     <string name="hint_proxy_host">Server (VD: 192.168.1.10)</string>
     <string name="hint_proxy_port">Port (VD: 8080)</string>
     <string name="label_proxy_auth_method">Phương thức xác thực</string>
     <string name="auth_method_none">Không có</string>
-    <string name="auth_method_user_pass">Tài khoản / Mật khẩu</string>
+    <string name="auth_method_user_pass">Tài khoản / Mật khẩu (Tự động)</string>
+    <string name="auth_method_http_basic">HTTP Basic (User / Pass)</string>
+    <string name="auth_method_http_digest">HTTP Digest (MD5 / SHA-256)</string>
+    <string name="auth_method_bearer_token">Bearer / Token</string>
     <string name="hint_proxy_user">Tài khoản / Username</string>
     <string name="hint_proxy_pass">Mật khẩu / Password</string>
+    <string name="hint_proxy_token">Token / API Key xác thực Proxy</string>
     <string name="label_dns_resolution">Độ phân giải DNS</string>
     <string name="dns_mode_proxy">Proxy</string>
     <string name="dns_mode_cloudflare">Cloudflare DNS</string>
@@ -84,17 +93,23 @@
     <string name="action_save">Lưu Proxy</string>
     <string name="action_save_and_connect">Kết nối</string>
     <string name="action_cancel">Hủy</string>
-    <string name="label_auth_optional_hint">Có thể chỉnh sửa hoặc để trống tài khoản và mật khẩu để kết nối trực tiếp, tránh báo lỗi sai tài khoản/mật khẩu.</string>
+    <string name="label_auth_optional_hint">Chọn đúng phương thức xác thực nếu Proxy yêu cầu mật khẩu hoặc Token (hỗ trợ HTTP Basic, Digest MD5/SHA-256, SOCKS5 User/Pass, Bearer Token).</string>
     <string name="error_host_required">Vui lòng nhập địa chỉ Server / IP</string>
     <string name="error_port_required">Vui lòng nhập cổng (1 – 65535)</string>
     <string name="error_port_invalid">Cổng vượt giới hạn (chỉ cho phép từ 1 đến 65535)</string>
     <string name="error_username_required">Vui lòng nhập tài khoản</string>
+    <string name="error_auth_credentials_required">Vui lòng nhập tài khoản hoặc mật khẩu Proxy</string>
+    <string name="error_token_required">Vui lòng nhập Token xác thực Proxy</string>
+    <string name="error_proxy_requires_auth_short">Proxy yêu cầu xác thực — hãy chọn phương thức và nhập thông tin</string>
     <string name="error_custom_dns_invalid">Vui lòng nhập địa chỉ máy chủ DNS hợp lệ (VD: 1.1.1.1)</string>
     <string name="action_test_connection">Kiểm tra kết nối</string>
     <string name="msg_testing_connection">Đang kiểm tra kết nối tới máy chủ Proxy…</string>
     <string name="msg_test_connection_ok">Kết nối thành công (%1$d ms)</string>
     <string name="msg_test_connection_ok_ip">Kết nối thành công • %1$d ms • IP: %2$s</string>
+    <string name="msg_test_connection_ok_proto">Kết nối thành công (%1$s • %2$d ms)</string>
+    <string name="msg_test_connection_ok_proto_ip">Kết nối thành công (%1$s) • %2$d ms • IP: %3$s</string>
     <string name="msg_test_connection_failed">Kết nối thất bại: %1$s</string>
+    <string name="msg_connect_requires_test">Vui lòng kiểm tra kết nối thành công trước khi kết nối</string>
     <string name="msg_clipboard_parsed">Đã tự động điền từ Clipboard</string>
     <string name="msg_clipboard_invalid">Không nhận dạng được định dạng ip:port[:user:pass]</string>
 
@@ -186,6 +201,7 @@
     <string name="diag_status_fail">Thất bại</string>
     <string name="diag_auth_none">Không yêu cầu Auth</string>
     <string name="diag_auth_ok">Xác thực hợp lệ</string>
+    <string name="diag_auth_required">Yêu cầu xác thực</string>
     <string name="diag_auth_failed">Sai tài khoản / mật khẩu (407)</string>
     <string name="section_speed_test">Đo tốc độ mạng qua Proxy</string>
     <string name="action_run_speed_test">Đo tốc độ lại</string>
@@ -453,6 +469,21 @@
     <string name="filter_error">Lỗi</string>
     <string name="msg_batch_test_summary">Kiểm tra %1$d Proxy: %2$d hoạt động, %3$d lỗi</string>
     <string name="log_proxy_connect_refused">Từ chối kết nối Proxy lỗi %1$s (%2$s)</string>
+    <string name="log_protocol_auto_detected">Đã nhận diện giao thức %2$s cho Proxy %1$s</string>
+
+    <!-- Full Traffic & Send Process Logging -->
+    <string name="filter_log_all">Tất cả</string>
+    <string name="filter_log_dns">DNS</string>
+    <string name="filter_log_traffic">Truyền tải</string>
+    <string name="desc_log_app_icon">Biểu tượng ứng dụng</string>
+    <string name="log_dns_query">DNS %1$s %2$s</string>
+    <string name="log_traffic_send_request">Gửi %1$s -> %2$s qua %3$s</string>
+    <string name="log_traffic_tunnel_ready">Đã mở kết nối %1$s -> %2$s (%3$d ms)</string>
+    <string name="log_traffic_transfer_done">Hoàn tất %1$s • Gửi ↑ %2$s • Nhận ↓ %3$s (%4$d ms)</string>
+    <string name="log_traffic_send_failed">Lỗi gửi %1$s -> %2$s (%3$s)</string>
+    <string name="log_traffic_private_blocked">Chặn định tuyến mạng riêng tới %1$s</string>
+    <string name="log_traffic_tcp_syn">TCP SYN -> %1$s</string>
+    <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
 </resources>

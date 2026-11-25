@@ -19,6 +19,7 @@
 
     <!-- Dashboard -->
     <string name="action_connect">Connect Proxy</string>
+    <string name="action_connecting">Connecting…</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_test_active">Speed Test</string>
     <string name="label_active_proxy">Selected Proxy</string>
@@ -50,6 +51,9 @@
     <string name="empty_proxy_title">Your Proxy List Is Empty</string>
     <string name="empty_proxy_subtitle">Add an HTTP Proxy (host, port, user, pass) or bulk import to save and connect with a fixed IP.</string>
     <string name="badge_auth_yes">User/Pass</string>
+    <string name="badge_auth_basic">HTTP Basic</string>
+    <string name="badge_auth_digest">HTTP Digest</string>
+    <string name="badge_auth_token">Bearer Token</string>
     <string name="badge_auth_no">No Auth</string>
     <string name="badge_active_now">Active</string>
     <string name="latency_untested">Untested</string>
@@ -67,13 +71,18 @@
     <string name="label_quick_paste_tip">Quick-paste ip:port:user:pass or socks5://user:pass@ip:port</string>
     <string name="hint_proxy_name">Configuration Name (e.g. US East 1)</string>
     <string name="label_proxy_protocol">Protocol</string>
+    <string name="protocol_all">All Protocols</string>
     <string name="hint_proxy_host">Server (e.g. 192.168.1.10)</string>
     <string name="hint_proxy_port">Port (e.g. 8080)</string>
     <string name="label_proxy_auth_method">Authentication Method</string>
     <string name="auth_method_none">None</string>
-    <string name="auth_method_user_pass">Username / Password</string>
+    <string name="auth_method_user_pass">Username / Password (Auto)</string>
+    <string name="auth_method_http_basic">HTTP Basic (User / Pass)</string>
+    <string name="auth_method_http_digest">HTTP Digest (MD5 / SHA-256)</string>
+    <string name="auth_method_bearer_token">Bearer / Token</string>
     <string name="hint_proxy_user">Username</string>
     <string name="hint_proxy_pass">Password</string>
+    <string name="hint_proxy_token">Proxy Auth Token / API Key</string>
     <string name="label_dns_resolution">DNS Resolution</string>
     <string name="dns_mode_proxy">Proxy</string>
     <string name="dns_mode_cloudflare">Cloudflare DNS</string>
@@ -84,17 +93,23 @@
     <string name="action_save">Save Proxy</string>
     <string name="action_save_and_connect">Connect</string>
     <string name="action_cancel">Cancel</string>
-    <string name="label_auth_optional_hint">Edit auth or leave username and password blank to connect directly without wrong-credential errors.</string>
+    <string name="label_auth_optional_hint">Choose an authentication method if the Proxy requires a password or token (supports HTTP Basic, Digest MD5/SHA-256, SOCKS5 User/Pass, Bearer Token).</string>
     <string name="error_host_required">Please enter a Server / IP address</string>
     <string name="error_port_required">Please enter a port (1 – 65535)</string>
     <string name="error_port_invalid">Port exceeds limit (allowed: 1 – 65535)</string>
     <string name="error_username_required">Please enter username</string>
+    <string name="error_auth_credentials_required">Please enter Proxy username or password</string>
+    <string name="error_token_required">Please enter Proxy authentication Token</string>
+    <string name="error_proxy_requires_auth_short">Proxy requires authentication — choose method and enter credentials</string>
     <string name="error_custom_dns_invalid">Please enter a valid DNS server IP (e.g. 1.1.1.1)</string>
     <string name="action_test_connection">Test Connection</string>
     <string name="msg_testing_connection">Testing connection to Proxy server…</string>
     <string name="msg_test_connection_ok">Connection succeeded (%1$d ms)</string>
     <string name="msg_test_connection_ok_ip">Connection succeeded • %1$d ms • IP: %2$s</string>
+    <string name="msg_test_connection_ok_proto">Connection succeeded (%1$s • %2$d ms)</string>
+    <string name="msg_test_connection_ok_proto_ip">Connection succeeded (%1$s) • %2$d ms • IP: %3$s</string>
     <string name="msg_test_connection_failed">Connection failed: %1$s</string>
+    <string name="msg_connect_requires_test">Please test the connection successfully before connecting</string>
     <string name="msg_clipboard_parsed">Auto-filled from Clipboard</string>
     <string name="msg_clipboard_invalid">Could not recognize ip:port[:user:pass] format</string>
 
@@ -186,6 +201,7 @@
     <string name="diag_status_fail">Failed</string>
     <string name="diag_auth_none">No Auth Required</string>
     <string name="diag_auth_ok">Auth Valid</string>
+    <string name="diag_auth_required">Auth Required</string>
     <string name="diag_auth_failed">Invalid User / Pass (407)</string>
     <string name="section_speed_test">Proxy Speed Test</string>
     <string name="action_run_speed_test">Test Speed</string>
@@ -453,6 +469,21 @@
     <string name="filter_error">Error</string>
     <string name="msg_batch_test_summary">Checked %1$d Proxies: %2$d working, %3$d failed</string>
     <string name="log_proxy_connect_refused">Refused connecting to faulty Proxy %1$s (%2$s)</string>
+    <string name="log_protocol_auto_detected">Detected protocol %2$s for Proxy %1$s</string>
+
+    <!-- Full Traffic & Send Process Logging -->
+    <string name="filter_log_all">All</string>
+    <string name="filter_log_dns">DNS</string>
+    <string name="filter_log_traffic">Traffic</string>
+    <string name="desc_log_app_icon">App Icon</string>
+    <string name="log_dns_query">DNS %1$s %2$s</string>
+    <string name="log_traffic_send_request">Send %1$s -> %2$s via %3$s</string>
+    <string name="log_traffic_tunnel_ready">Tunnel opened %1$s -> %2$s (%3$d ms)</string>
+    <string name="log_traffic_transfer_done">Completed %1$s • Sent ↑ %2$s • Recv ↓ %3$s (%4$d ms)</string>
+    <string name="log_traffic_send_failed">Send error %1$s -> %2$s (%3$s)</string>
+    <string name="log_traffic_private_blocked">Blocked private network routing to %1$s</string>
+    <string name="log_traffic_tcp_syn">TCP SYN -> %1$s</string>
+    <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Version: %1$s • 100%% Java</string>
 </resources>

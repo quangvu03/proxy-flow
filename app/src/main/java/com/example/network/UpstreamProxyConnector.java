@@ -27,6 +27,12 @@ public final class UpstreamProxyConnector {
         }
     }
 
+    public static class ProxyAuthRequiredException extends ProxyAuthException {
+        public ProxyAuthRequiredException(String message) {
+            super(message);
+        }
+    }
+
     private UpstreamProxyConnector() {}
 
     public static Socket openRawUpstreamSocket(ProxyConfig proxy, int timeoutMs) throws IOException {
@@ -58,53 +64,32 @@ public final class UpstreamProxyConnector {
 
     public static Socket openTunnel(ProxyConfig proxy, String targetHost, int targetPort, int timeoutMs)
             throws IOException {
-        Socket upstream = openRawUpstreamSocket(proxy, timeoutMs);
-        try {
-            if (proxy.isSocks5Protocol()) {
+        if (proxy != null && proxy.isSocks5Protocol()) {
+            Socket upstream = openRawUpstreamSocket(proxy, timeoutMs);
+            try {
                 performSocks5Connect(upstream, proxy, targetHost, targetPort);
-            } else {
-                performHttpConnect(upstream, proxy, targetHost, targetPort);
+                return upstream;
+            } catch (IOException e) {
+                closeQuietly(upstream);
+                throw e;
             }
-            return upstream;
-        } catch (IOException e) {
-            closeQuietly(upstream);
-            throw e;
         }
+        if (proxy == null) {
+            throw new IOException("Invalid proxy configuration");
+        }
+        return performHttpConnectWithAuthRetry(proxy, targetHost, targetPort, timeoutMs);
     }
 
-    private static void performHttpConnect(Socket upstream, ProxyConfig proxy, String targetHost, int targetPort)
-            throws IOException {
-        StringBuilder req = new StringBuilder();
-        req.append("CONNECT ").append(targetHost).append(":").append(targetPort).append(" HTTP/1.1\r\n");
-        req.append("Host: ").append(targetHost).append(":").append(targetPort).append("\r\n");
-        if (proxy.hasAuth()) {
-            req.append("Proxy-Authorization: Basic ").append(proxy.getBasicAuthToken()).append("\r\n");
-        }
-        req.append("\r\n");
-
-        OutputStream out = upstream.getOutputStream();
-        out.write(req.toString().getBytes(StandardCharsets.UTF_8));
-        out.flush();
-
-        InputStream in = upstream.getInputStream();
-        String statusLine = readAsciiLine(in);
-        if (statusLine == null) {
-            throw new IOException("Proxy closed connection during CONNECT");
-        }
-        int code = ProxyTester.parseHttpStatusCode(statusLine);
-        if (code == 407) {
-            if (!proxy.hasAuth()) {
-                throw new ProxyAuthException("Proxy yêu cầu xác thực (chế độ không tài khoản)");
-            }
-            throw new ProxyAuthException("Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy");
-        }
+    private static Socket performHttpConnectWithAuthRetry(
+            ProxyConfig proxy, String targetHost, int targetPort, int timeoutMs) throws IOException {
+        ProxyAuthHelper.TunnelAttemptResult attempt = ProxyAuthHelper.sendHttpConnectWithAuthRetry(
+                proxy, targetHost, targetPort, timeoutMs);
+        int code = attempt.responseHead.getStatusCode();
         if (code < 200 || code >= 300) {
+            closeQuietly(attempt.socket);
             throw new IOException("Proxy CONNECT returned HTTP " + code);
         }
-        String line;
-        while ((line = readAsciiLine(in)) != null && !line.isEmpty()) {
-            // Drain CONNECT response headers
-        }
+        return attempt.socket;
     }
 
     private static void performSocks5Connect(Socket upstream, ProxyConfig proxy, String targetHost, int targetPort)
@@ -126,15 +111,25 @@ public final class UpstreamProxyConnector {
             throw new IOException("Invalid SOCKS5 version: " + ver);
         }
         if (method == 0xFF) {
-            throw new ProxyAuthException("SOCKS5 server rejected authentication methods");
+            if (!proxy.hasAuth()) {
+                throw new ProxyAuthRequiredException("Proxy SOCKS5 yêu cầu xác thực (vui lòng nhập tài khoản / mật khẩu)");
+            }
+            throw new ProxyAuthException("Lỗi xác thực SOCKS5: Máy chủ từ chối phương thức đăng nhập");
         }
         if (method == 0x02) {
-            byte[] userBytes = proxy.hasAuth()
-                    ? proxy.getUsername().getBytes(StandardCharsets.UTF_8)
-                    : new byte[0];
-            byte[] passBytes = proxy.hasAuth()
-                    ? proxy.getPassword().getBytes(StandardCharsets.UTF_8)
-                    : new byte[0];
+            String rawUser = "";
+            String rawPass = "";
+            if (proxy.hasAuth()) {
+                if (proxy.getAuthMethod() == ProxyConfig.AuthMethod.BEARER_TOKEN) {
+                    rawUser = proxy.getUsername();
+                    rawPass = proxy.getAuthToken();
+                } else {
+                    rawUser = proxy.getUsername();
+                    rawPass = proxy.getPassword();
+                }
+            }
+            byte[] userBytes = rawUser != null ? rawUser.getBytes(StandardCharsets.UTF_8) : new byte[0];
+            byte[] passBytes = rawPass != null ? rawPass.getBytes(StandardCharsets.UTF_8) : new byte[0];
             if (userBytes.length > 255 || passBytes.length > 255) {
                 throw new ProxyAuthException("SOCKS5 credentials exceed 255 bytes");
             }
@@ -151,7 +146,7 @@ public final class UpstreamProxyConnector {
             int authStatus = in.readUnsignedByte();
             if (authVer != 0x01 || authStatus != 0x00) {
                 if (!proxy.hasAuth()) {
-                    throw new ProxyAuthException("SOCKS5 yêu cầu xác thực (chế độ không tài khoản)");
+                    throw new ProxyAuthRequiredException("Proxy SOCKS5 yêu cầu xác thực (vui lòng nhập tài khoản / mật khẩu)");
                 }
                 throw new ProxyAuthException("Lỗi xác thực SOCKS5: Sai tài khoản hoặc mật khẩu");
             }
@@ -195,17 +190,6 @@ public final class UpstreamProxyConnector {
         if (rep != 0x00) {
             throw new IOException("SOCKS5 CONNECT failed with code " + rep);
         }
-    }
-
-    private static String readAsciiLine(InputStream in) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        int b;
-        while ((b = in.read()) != -1) {
-            if (b == '\n') break;
-            if (b != '\r') sb.append((char) b);
-            if (sb.length() > 4096) break;
-        }
-        return (b == -1 && sb.length() == 0) ? null : sb.toString();
     }
 
     private static void closeQuietly(Socket socket) {

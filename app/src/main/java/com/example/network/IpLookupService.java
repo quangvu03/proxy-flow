@@ -95,18 +95,31 @@ public final class IpLookupService {
     }
 
     public static IpDetails lookupViaProxy(ProxyConfig proxy) {
+        if (proxy != null && proxy.getProtocol().isAutoDetect()) {
+            ProxyTester.TestResult detected = ProxyTester.testProxy(proxy, TIMEOUT_MS);
+            if (!detected.isSuccess() || detected.getDetectedProtocol() == null) {
+                String err = !detected.getErrorMessage().isEmpty()
+                        ? detected.getErrorMessage()
+                        : "Proxy không phản hồi hoặc lỗi xác thực";
+                return new IpDetails("", "", "", "", "", "", "", 0, 0, false, true, err);
+            }
+            ProxyConfig resolved = proxy.copy();
+            resolved.setProtocol(detected.getDetectedProtocol());
+            proxy = resolved;
+        }
+        final ProxyConfig targetProxy = proxy;
         ExecutorService pool = Executors.newFixedThreadPool(4);
         try {
             // Step 1: Resolve exit IPv4 and IPv6 through the proxy first
-            Future<String> v4Future = pool.submit(() -> fetchProxyIpv4WithFallback(proxy));
-            Future<String> v6Future = pool.submit(() -> fetchProxyHttpsIp(proxy, "api6.ipify.org", "/?format=json", IP_ONLY_TIMEOUT_MS));
+            Future<String> v4Future = pool.submit(() -> fetchProxyIpv4WithFallback(targetProxy));
+            Future<String> v6Future = pool.submit(() -> fetchProxyHttpsIp(targetProxy, "api6.ipify.org", "/?format=json", IP_ONLY_TIMEOUT_MS));
 
             String ipv4 = safeString(v4Future);
             String ipv6 = safeString(v6Future);
 
             // Step 2: Query geolocation explicitly for the resolved exit IPv4 (or IPv6 / auto)
             String geoTargetIp = !ipv4.isEmpty() ? ipv4 : ipv6;
-            GeoInfo geo = queryProxyGeoConsensus(pool, proxy, geoTargetIp);
+            GeoInfo geo = queryProxyGeoConsensus(pool, targetProxy, geoTargetIp);
 
             if (ipv4.isEmpty() && isValidIpv4(geo.queryIp)) {
                 ipv4 = geo.queryIp;
@@ -319,34 +332,80 @@ public final class IpLookupService {
             return new GeoInfo();
         }
 
-        try (Socket socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, TIMEOUT_MS)) {
+        Socket socket = null;
+        try {
+            socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, TIMEOUT_MS);
             socket.setSoTimeout(TIMEOUT_MS);
 
             String targetPath = "http://ip-api.com" + querySuffix;
-            StringBuilder req = new StringBuilder();
-            req.append("GET ").append(targetPath).append(" HTTP/1.1\r\n");
-            req.append("Host: ip-api.com\r\n");
-            req.append("User-Agent: ProxyFlow/1.1\r\n");
-            req.append("Accept: application/json\r\n");
-            req.append("Accept-Encoding: identity\r\n");
-            if (proxy.hasAuth()) {
-                req.append("Proxy-Authorization: Basic ").append(proxy.getBasicAuthToken()).append("\r\n");
+            String initialAuth = ProxyAuthHelper.buildInitialProxyAuthHeaderValue(proxy);
+            writeIpApiProxyGet(socket.getOutputStream(), targetPath, initialAuth);
+
+            ProxyAuthHelper.HttpResponseHead head = ProxyAuthHelper.readHttpResponseHead(socket.getInputStream());
+            if (head != null && head.getStatusCode() == 407 && proxy.hasAuth()) {
+                String retryAuth = ProxyAuthHelper.buildChallengeResponseHeaderValue(
+                        proxy, head.getProxyAuthenticateHeaders(), "GET", targetPath, initialAuth);
+                if (retryAuth != null) {
+                    boolean canReuse = ProxyAuthHelper.drainResponseBodyForSocketReuse(socket.getInputStream(), head);
+                    if (!canReuse) {
+                        socket.close();
+                        socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, TIMEOUT_MS);
+                        socket.setSoTimeout(TIMEOUT_MS);
+                    }
+                    ProxyAuthHelper.HttpResponseHead retryHead = null;
+                    try {
+                        writeIpApiProxyGet(socket.getOutputStream(), targetPath, retryAuth);
+                        retryHead = ProxyAuthHelper.readHttpResponseHead(socket.getInputStream());
+                    } catch (IOException ioEx) {
+                        if (!canReuse) throw ioEx;
+                    }
+                    if (retryHead == null && canReuse) {
+                        socket.close();
+                        socket = UpstreamProxyConnector.openRawUpstreamSocket(proxy, TIMEOUT_MS);
+                        socket.setSoTimeout(TIMEOUT_MS);
+                        writeIpApiProxyGet(socket.getOutputStream(), targetPath, retryAuth);
+                        retryHead = ProxyAuthHelper.readHttpResponseHead(socket.getInputStream());
+                    }
+                    head = retryHead;
+                }
             }
-            req.append("Connection: close\r\n\r\n");
 
-            OutputStream out = socket.getOutputStream();
-            out.write(req.toString().getBytes(StandardCharsets.UTF_8));
-            out.flush();
-
-            String rawResp = readSocketText(socket);
-            String body = decodeHttpResponseBody(rawResp);
+            if (head == null || head.getStatusCode() < 200 || head.getStatusCode() >= 300) {
+                return new GeoInfo();
+            }
+            String headerStr = new String(head.getRawBytes(), StandardCharsets.ISO_8859_1);
+            String bodyRaw = readSocketText(socket);
+            String body = decodeHttpResponseBody(headerStr + bodyRaw);
             JSONObject json = parseFirstJsonObject(body);
             if (json != null && "success".equalsIgnoreCase(json.optString("status"))) {
                 return GeoInfo.fromIpApi(json);
             }
         } catch (Exception ignored) {
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException ignored) {
+                }
+            }
         }
         return new GeoInfo();
+    }
+
+    private static void writeIpApiProxyGet(OutputStream out, String targetPath, String authHeaderValue)
+            throws IOException {
+        StringBuilder req = new StringBuilder();
+        req.append("GET ").append(targetPath).append(" HTTP/1.1\r\n");
+        req.append("Host: ip-api.com\r\n");
+        req.append("User-Agent: ProxyFlow/1.1\r\n");
+        req.append("Accept: application/json\r\n");
+        req.append("Accept-Encoding: identity\r\n");
+        if (authHeaderValue != null && !authHeaderValue.isEmpty()) {
+            req.append("Proxy-Authorization: ").append(authHeaderValue).append("\r\n");
+        }
+        req.append("Connection: close\r\n\r\n");
+        out.write(req.toString().getBytes(StandardCharsets.UTF_8));
+        out.flush();
     }
 
     private static String fetchProxyHttpsIp(ProxyConfig proxy, String host, String path, int timeoutMs) {

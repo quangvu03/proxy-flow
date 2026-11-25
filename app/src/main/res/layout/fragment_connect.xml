@@ -110,20 +110,58 @@
                     android:visibility="gone" />
 
                 <!-- Primary Connect / Disconnect Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_toggle_vpn"
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:layout_marginTop="20dp"
-                    android:backgroundTint="#14B8A6"
-                    android:text="@string/action_connect"
-                    android:textColor="#042F2E"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    app:cornerRadius="16dp"
-                    app:icon="@drawable/ic_power"
-                    app:iconGravity="textStart"
-                    app:iconTint="#042F2E" />
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_toggle_vpn"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:backgroundTint="#14B8A6"
+                        android:text="@string/action_connect"
+                        android:textColor="#042F2E"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="16dp"
+                        app:icon="@drawable/ic_power"
+                        app:iconGravity="textStart"
+                        app:iconTint="#042F2E" />
+
+                    <LinearLayout
+                        android:id="@+id/layout_connect_loading"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:translationZ="8dp"
+                        android:visibility="gone">
+
+                        <com.google.android.material.progressindicator.CircularProgressIndicator
+                            android:id="@+id/progress_connect_vpn"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:indeterminate="true"
+                            app:indicatorColor="#FFFFFF"
+                            app:indicatorSize="20dp"
+                            app:trackColor="#4DFFFFFF"
+                            app:trackThickness="2.5dp" />
+
+                        <TextView
+                            android:id="@+id/tv_connect_loading_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:text="@string/action_connecting"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"

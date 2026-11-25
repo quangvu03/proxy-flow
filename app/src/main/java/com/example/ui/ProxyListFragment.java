@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.R;
+import com.example.ads.AppOpenAdManager;
 import com.example.data.ProxyFileHelper;
 import com.example.data.ProxyRepository;
 import com.example.model.ProxyConfig;
@@ -236,6 +237,7 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
 
     private void openBuyProxyPage() {
         try {
+            AppOpenAdManager.getInstance(requireContext()).suppressNextForegroundOpen();
             Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(BUY_PROXY_URL));
             startActivity(browserIntent);
         } catch (ActivityNotFoundException e) {

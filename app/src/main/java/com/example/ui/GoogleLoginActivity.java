@@ -15,6 +15,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.example.R;
+import com.example.ads.AppOpenAdManager;
 import com.example.auth.GoogleAuthManager;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
@@ -111,6 +112,7 @@ public class GoogleLoginActivity extends AppCompatActivity {
         }
         hideError();
         setLoading(true);
+        AppOpenAdManager.getInstance(this).suppressNextForegroundOpen();
         GoogleAuthManager.signInWithGoogle(this, new GoogleAuthManager.AuthCallback() {
             @Override
             public void onSuccess(@NonNull FirebaseUser user) {

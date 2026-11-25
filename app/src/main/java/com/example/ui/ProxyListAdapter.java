@@ -124,11 +124,7 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             }
 
             // Auth badge
-            if (proxy.hasAuth()) {
-                tvAuthBadge.setText(ctx.getString(R.string.badge_auth_yes) + ": " + proxy.getUsername());
-            } else {
-                tvAuthBadge.setText(R.string.badge_auth_no);
-            }
+            tvAuthBadge.setText(proxy.getAuthDisplaySummary(ctx));
 
             // Latency badge & Connect button appearance
             long lat = proxy.getLatencyMs();
