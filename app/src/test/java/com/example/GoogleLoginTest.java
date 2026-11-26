@@ -18,6 +18,8 @@ import androidx.test.core.app.ApplicationProvider;
 import com.example.auth.GoogleAuthManager;
 import com.example.data.ProxyRepository;
 import com.example.ui.GoogleLoginActivity;
+import com.example.ui.SettingsActivity;
+import com.example.ui.SettingsUiHelper;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 
@@ -110,5 +112,72 @@ public class GoogleLoginTest {
                 ? repository.getLogs().getValue().size()
                 : 0;
         assertEquals(initialCount, afterCount);
+    }
+
+    @Test
+    public void googleLoginActivity_accountCardHasNoUidTextView() {
+        GoogleLoginActivity activity = Robolectric.buildActivity(GoogleLoginActivity.class)
+                .setup()
+                .get();
+
+        ViewGroup accountCard = activity.findViewById(R.id.card_google_account);
+        assertNotNull(accountCard);
+        ViewGroup accountContent = (ViewGroup) accountCard.getChildAt(0);
+        // Avatar frame, displayName, email, verified pill, switch button, sign out button (no UID)
+        assertEquals(6, accountContent.getChildCount());
+    }
+
+    @Test
+    public void settingsScreen_showsSyncPromptWhenSignedOut_showsAccountWhenSignedIn_andOpensAccountPage() {
+        SettingsActivity settingsActivity = Robolectric.buildActivity(SettingsActivity.class)
+                .setup()
+                .get();
+
+        View rowAccount = settingsActivity.findViewById(R.id.row_setting_account);
+        TextView tvTitle = settingsActivity.findViewById(R.id.tv_setting_account_title);
+        TextView tvSubtitle = settingsActivity.findViewById(R.id.tv_setting_account_subtitle);
+        View ivGoogle = settingsActivity.findViewById(R.id.iv_setting_account_google);
+        View cardAvatar = settingsActivity.findViewById(R.id.card_setting_account_avatar);
+        TextView tvAvatar = settingsActivity.findViewById(R.id.tv_setting_account_avatar);
+
+        assertNotNull(rowAccount);
+        assertNotNull(tvTitle);
+        assertNotNull(tvSubtitle);
+        assertEquals(View.VISIBLE, ivGoogle.getVisibility());
+        assertEquals(View.GONE, cardAvatar.getVisibility());
+        assertEquals(
+                settingsActivity.getString(R.string.setting_account_sign_in_title),
+                tvTitle.getText().toString()
+        );
+        assertEquals(
+                settingsActivity.getString(R.string.setting_account_sign_in_subtitle),
+                tvSubtitle.getText().toString()
+        );
+
+        rowAccount.performClick();
+        Intent signedOutIntent = Shadows.shadowOf(settingsActivity).getNextStartedActivity();
+        assertNotNull(signedOutIntent);
+        assertNotNull(signedOutIntent.getComponent());
+        assertEquals(GoogleLoginActivity.class.getName(), signedOutIntent.getComponent().getClassName());
+
+        View root = settingsActivity.findViewById(R.id.settings_root);
+        SettingsUiHelper.renderAccountState(
+                settingsActivity,
+                root,
+                true,
+                "Vu Tran",
+                "vutran08012k3@gmail.com"
+        );
+        assertEquals(View.GONE, ivGoogle.getVisibility());
+        assertEquals(View.VISIBLE, cardAvatar.getVisibility());
+        assertEquals("V", tvAvatar.getText().toString());
+        assertEquals("Vu Tran", tvTitle.getText().toString());
+        assertEquals("vutran08012k3@gmail.com", tvSubtitle.getText().toString());
+
+        rowAccount.performClick();
+        Intent signedInIntent = Shadows.shadowOf(settingsActivity).getNextStartedActivity();
+        assertNotNull(signedInIntent);
+        assertNotNull(signedInIntent.getComponent());
+        assertEquals(GoogleLoginActivity.class.getName(), signedInIntent.getComponent().getClassName());
     }
 }

@@ -5,7 +5,10 @@ import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,28 +21,25 @@ import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.appopen.AppOpenAd;
 
-import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Manages AdMob App Open Ads with custom open-count gating:
  * - 1st app open: never show
  * - 2nd app open: never show
- * - 3rd app open: always show
- * - 4th+ app opens: random 50% show / 50% skip
+ * - 3rd+ app opens: always show
  */
 public final class AppOpenAdManager implements Application.ActivityLifecycleCallbacks {
 
     public static final String APP_OPEN_AD_UNIT_ID = "ca-app-pub-4297682558932045/2179267626";
 
+    private static final String TAG = "AppOpenAdManager";
     private static final String PREFS_NAME = "proxyflow_app_open_ads";
     private static final String KEY_OPEN_COUNT = "open_count";
     private static final long AD_EXPIRY_HOURS = 4L;
-    private static final long PENDING_SHOW_WINDOW_MS = 3500L;
-
-    public interface RandomGate {
-        boolean nextBoolean();
-    }
+    private static final long PENDING_SHOW_WINDOW_MS = 15000L;
+    private static final int MAX_LOAD_RETRIES = 2;
+    private static final long RETRY_BASE_DELAY_MS = 2500L;
 
     public static final class OpenDecision {
         private final int openCount;
@@ -63,7 +63,7 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
 
     private final Context appContext;
     private final SharedPreferences prefs;
-    private RandomGate randomGate = new SecureRandom()::nextBoolean;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private boolean registered = false;
     private int startedActivityCount = 0;
@@ -79,9 +79,12 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     private boolean isLoadingAd = false;
     private boolean isShowingAd = false;
     private long loadTimeMs = 0L;
+    private int consecutiveLoadFailures = 0;
 
     private boolean pendingShowForCurrentOpen = false;
     private long pendingShowDeadlineMs = 0L;
+    @Nullable
+    private Runnable pendingRetryRunnable;
 
     private AppOpenAdManager(@NonNull Context appContext) {
         this.appContext = appContext;
@@ -128,13 +131,12 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     }
 
     @VisibleForTesting
-    public void setRandomGateForTesting(@NonNull RandomGate gate) {
-        this.randomGate = gate;
-    }
-
-    @VisibleForTesting
     public void resetStateForTesting() {
-        prefs.edit().clear().apply();
+        prefs.edit().clear().commit();
+        if (pendingRetryRunnable != null) {
+            mainHandler.removeCallbacks(pendingRetryRunnable);
+            pendingRetryRunnable = null;
+        }
         startedActivityCount = 0;
         changingConfigurations = false;
         suppressNextOpen = false;
@@ -144,22 +146,17 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
         isLoadingAd = false;
         isShowingAd = false;
         loadTimeMs = 0L;
+        consecutiveLoadFailures = 0;
     }
 
-    public static boolean evaluateShowPolicy(int openCount, @NonNull RandomGate randomGate) {
-        if (openCount <= 2) {
-            return false;
-        }
-        if (openCount == 3) {
-            return true;
-        }
-        return randomGate.nextBoolean();
+    public static boolean evaluateShowPolicy(int openCount) {
+        return openCount >= 3;
     }
 
     public synchronized OpenDecision recordAppOpenAndEvaluate() {
         int nextOpenCount = prefs.getInt(KEY_OPEN_COUNT, 0) + 1;
-        prefs.edit().putInt(KEY_OPEN_COUNT, nextOpenCount).apply();
-        boolean shouldShow = evaluateShowPolicy(nextOpenCount, randomGate);
+        prefs.edit().putInt(KEY_OPEN_COUNT, nextOpenCount).commit();
+        boolean shouldShow = evaluateShowPolicy(nextOpenCount);
         return new OpenDecision(nextOpenCount, shouldShow);
     }
 
@@ -176,42 +173,70 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
         if (isLoadingAd || isAdAvailable()) {
             return;
         }
+        if (pendingRetryRunnable != null) {
+            mainHandler.removeCallbacks(pendingRetryRunnable);
+            pendingRetryRunnable = null;
+        }
         isLoadingAd = true;
-        try {
-            AdMobBannerHelper.initializeAsync(appContext);
-            AdRequest request = new AdRequest.Builder().build();
-            AppOpenAd.load(
-                    appContext,
-                    APP_OPEN_AD_UNIT_ID,
-                    request,
-                    new AppOpenAd.AppOpenAdLoadCallback() {
-                        @Override
-                        public void onAdLoaded(@NonNull AppOpenAd ad) {
-                            appOpenAd = ad;
-                            loadTimeMs = System.currentTimeMillis();
-                            isLoadingAd = false;
-                            Activity candidate = resumedActivity != null ? resumedActivity : currentActivity;
-                            if (candidate != null && candidate == resumedActivity) {
-                                tryShowPendingAd(candidate);
+        AdMobBannerHelper.runWhenInitialized(appContext, () -> {
+            if (isAdAvailable()) {
+                isLoadingAd = false;
+                return;
+            }
+            try {
+                AdRequest request = new AdRequest.Builder().build();
+                AppOpenAd.load(
+                        appContext,
+                        APP_OPEN_AD_UNIT_ID,
+                        request,
+                        new AppOpenAd.AppOpenAdLoadCallback() {
+                            @Override
+                            public void onAdLoaded(@NonNull AppOpenAd ad) {
+                                Log.d(TAG, "AppOpenAd loaded successfully");
+                                appOpenAd = ad;
+                                loadTimeMs = System.currentTimeMillis();
+                                isLoadingAd = false;
+                                consecutiveLoadFailures = 0;
+                                Activity candidate = resumedActivity != null ? resumedActivity : currentActivity;
+                                if (candidate != null && candidate == resumedActivity) {
+                                    tryShowPendingAd(candidate);
+                                }
+                            }
+
+                            @Override
+                            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                                isLoadingAd = false;
+                                consecutiveLoadFailures++;
+                                Log.w(TAG, "AppOpenAd failed to load (code="
+                                        + loadAdError.getCode() + "): " + loadAdError.getMessage());
+                                if (consecutiveLoadFailures <= MAX_LOAD_RETRIES && startedActivityCount > 0) {
+                                    long delayMs = RETRY_BASE_DELAY_MS * consecutiveLoadFailures;
+                                    pendingRetryRunnable = () -> {
+                                        pendingRetryRunnable = null;
+                                        if (startedActivityCount > 0 && !isAdAvailable()) {
+                                            loadAdIfNeeded();
+                                        }
+                                    };
+                                    mainHandler.postDelayed(pendingRetryRunnable, delayMs);
+                                }
                             }
                         }
-
-                        @Override
-                        public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
-                            isLoadingAd = false;
-                        }
-                    }
-            );
-        } catch (Throwable ignored) {
-            isLoadingAd = false;
-        }
+                );
+            } catch (Throwable t) {
+                isLoadingAd = false;
+                Log.w(TAG, "AppOpenAd.load threw exception: " + t.getMessage());
+            }
+        });
     }
 
     private void onAppEnteredForeground(@NonNull Activity activity) {
         if (isShowingAd || isAdActivity(activity)) {
             return;
         }
+        consecutiveLoadFailures = 0;
         OpenDecision decision = recordAppOpenAndEvaluate();
+        Log.d(TAG, "App foreground open #" + decision.getOpenCount()
+                + ", shouldShow=" + decision.isShouldShowAd());
         if (decision.isShouldShowAd()) {
             pendingShowForCurrentOpen = true;
             pendingShowDeadlineMs = SystemClock.elapsedRealtime() + PENDING_SHOW_WINDOW_MS;
@@ -302,6 +327,9 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     @Override
     public void onActivityResumed(@NonNull Activity activity) {
         if (!isAdActivity(activity)) {
+            // Clear stale suppression if an external dialog (e.g. VPN/permission sheet)
+            // paused without stopping the Activity.
+            suppressNextOpen = false;
             currentActivity = activity;
             resumedActivity = activity;
             tryShowPendingAd(activity);

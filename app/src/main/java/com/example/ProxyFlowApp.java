@@ -20,6 +20,8 @@ public class ProxyFlowApp extends Application {
         SettingsPreferences.applySavedThemeAndLocale(this);
         MapHelper.initConfig(this);
         AdMobBannerHelper.initializeAsync(this);
-        AppOpenAdManager.getInstance(this).register(this);
+        AppOpenAdManager appOpenAdManager = AppOpenAdManager.getInstance(this);
+        appOpenAdManager.register(this);
+        appOpenAdManager.loadAdIfNeeded();
     }
 }

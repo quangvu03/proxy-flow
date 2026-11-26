@@ -42,7 +42,6 @@ public class GoogleLoginActivity extends AppCompatActivity {
     private TextView tvAvatarInitial;
     private TextView tvDisplayName;
     private TextView tvEmail;
-    private TextView tvUid;
 
     @Nullable
     private FirebaseAuth firebaseAuth;
@@ -79,7 +78,6 @@ public class GoogleLoginActivity extends AppCompatActivity {
         tvAvatarInitial = findViewById(R.id.tv_google_avatar_initial);
         tvDisplayName = findViewById(R.id.tv_google_display_name);
         tvEmail = findViewById(R.id.tv_google_email);
-        tvUid = findViewById(R.id.tv_google_uid);
 
         firebaseAuth = GoogleAuthManager.getFirebaseAuth(this);
 
@@ -194,7 +192,6 @@ public class GoogleLoginActivity extends AppCompatActivity {
         tvDisplayName.setText(displayName);
         tvEmail.setText(email);
         tvEmail.setVisibility(TextUtils.isEmpty(email) ? View.GONE : View.VISIBLE);
-        tvUid.setText(getString(R.string.label_google_uid, user.getUid()));
     }
 
     private void setLoading(boolean loading) {

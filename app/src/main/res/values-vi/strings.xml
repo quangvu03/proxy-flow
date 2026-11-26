@@ -270,6 +270,15 @@
     <string name="section_language_subtitle">Mặc định theo ngôn ngữ hệ thống • Tự chỉnh sẽ lưu trong SQLite</string>
     <string name="lang_vietnamese">Tiếng Việt</string>
     <string name="lang_english">English (Tiếng Anh)</string>
+    <string name="lang_korean">한국어 (Tiếng Hàn)</string>
+    <string name="lang_japanese">日本語 (Tiếng Nhật)</string>
+    <string name="lang_german">Deutsch (Tiếng Đức)</string>
+    <string name="lang_spanish">Español (Tiếng Tây Ban Nha)</string>
+    <string name="lang_indonesian">Bahasa Indonesia (Tiếng Indonesia)</string>
+    <string name="lang_italian">Italiano (Tiếng Ý)</string>
+    <string name="lang_arabic">العربية (Tiếng Ả Rập)</string>
+    <string name="lang_hindi">हिन्दी (Tiếng Hindi)</string>
+    <string name="lang_portuguese">Português (Tiếng Bồ Đào Nha)</string>
     <string name="lang_system">Theo ngôn ngữ hệ thống</string>
     <string name="setting_auto_stop_title">Tự động dừng lại</string>
     <string name="setting_auto_stop_subtitle">Tự động dừng dịch vụ khi mất kết nối</string>
@@ -408,7 +417,6 @@
     <string name="title_google_only_login">Đăng nhập bằng Google</string>
     <string name="action_continue_with_google">Continue with Google</string>
     <string name="badge_signed_in_google">Đã xác thực bằng tài khoản Google</string>
-    <string name="label_google_uid">UID: %1$s</string>
     <string name="action_switch_google_account">Đổi tài khoản Google</string>
     <string name="action_sign_out">Đăng xuất</string>
     <string name="msg_google_login_success">Đã đăng nhập: %1$s</string>
@@ -416,6 +424,10 @@
     <string name="msg_google_login_failed">Đăng nhập Google thất bại: %1$s</string>
     <string name="msg_google_config_missing">Chưa cấu hình Web Client ID cho Google Sign-In</string>
     <string name="msg_signed_out">Đã đăng xuất tài khoản Google</string>
+    <string name="settings_group_account">Tài khoản</string>
+    <string name="setting_account_sign_in_title">Đăng nhập bằng tài khoản Google</string>
+    <string name="setting_account_sign_in_subtitle">Đăng nhập bằng tài khoản Google để đồng bộ giữa các thiết bị</string>
+    <string name="setting_account_signed_in_subtitle">Tài khoản Google đã đăng nhập • Nhấn để xem tài khoản</string>
 
     <!-- Localized Proxy & VPN Connection Logs -->
     <string name="log_proxy_updated">Đã cập nhật Proxy %1$s</string>

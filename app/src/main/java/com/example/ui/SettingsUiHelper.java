@@ -11,10 +11,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 
 import com.example.BuildConfig;
 import com.example.R;
+import com.example.auth.GoogleAuthManager;
 import com.example.data.ProxyLogFormatter;
 import com.example.data.ProxyRepository;
 import com.example.data.SettingsPreferences;
@@ -31,7 +34,11 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Shared Pure Java helper binding the grouped Settings screen rows and
@@ -54,6 +61,8 @@ public final class SettingsUiHelper {
     public static void bind(@NonNull Context context, @NonNull View root) {
         SettingsPreferences settingsPrefs = new SettingsPreferences(context);
         ProxyRepository repository = ProxyRepository.getInstance(context);
+
+        View rowAccount = root.findViewById(R.id.row_setting_account);
 
         View rowTheme = root.findViewById(R.id.row_setting_theme);
         TextView tvThemeValue = root.findViewById(R.id.tv_theme_value);
@@ -87,6 +96,28 @@ public final class SettingsUiHelper {
         switchAutoStop.setOnCheckedChangeListener((buttonView, isChecked) ->
                 settingsPrefs.setAutoStopOnDisconnectEnabled(isChecked));
         rowAutoStop.setOnClickListener(v -> switchAutoStop.toggle());
+
+        if (rowAccount != null) {
+            rowAccount.setOnClickListener(v ->
+                    context.startActivity(new Intent(context, GoogleLoginActivity.class)));
+            FirebaseAuth auth = GoogleAuthManager.getFirebaseAuth(context);
+            if (auth != null) {
+                FirebaseAuth.AuthStateListener authListener =
+                        firebaseAuth -> renderAccountSummary(context, root, firebaseAuth.getCurrentUser());
+                rowAccount.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                    @Override
+                    public void onViewAttachedToWindow(@NonNull View v) {
+                        auth.addAuthStateListener(authListener);
+                        renderAccountSummary(context, root, auth.getCurrentUser());
+                    }
+
+                    @Override
+                    public void onViewDetachedFromWindow(@NonNull View v) {
+                        auth.removeAuthStateListener(authListener);
+                    }
+                });
+            }
+        }
 
         if (rowNotifications != null) {
             rowNotifications.setOnClickListener(v ->
@@ -183,6 +214,71 @@ public final class SettingsUiHelper {
         if (tvPrivateRoutingSubtitle != null) {
             updatePrivateRoutingSubtitle(context, settingsPrefs, tvPrivateRoutingSubtitle);
         }
+        renderAccountSummary(context, root, GoogleAuthManager.getCurrentUser(context));
+    }
+
+    public static void renderAccountSummary(
+            @NonNull Context context,
+            @NonNull View root,
+            @Nullable FirebaseUser user) {
+        if (user == null) {
+            renderAccountState(context, root, false, null, null);
+            return;
+        }
+        renderAccountState(context, root, true, user.getDisplayName(), user.getEmail());
+    }
+
+    @VisibleForTesting
+    public static void renderAccountState(
+            @NonNull Context context,
+            @NonNull View root,
+            boolean signedIn,
+            @Nullable String displayName,
+            @Nullable String email) {
+        View ivGoogle = root.findViewById(R.id.iv_setting_account_google);
+        View cardAvatar = root.findViewById(R.id.card_setting_account_avatar);
+        TextView tvAvatar = root.findViewById(R.id.tv_setting_account_avatar);
+        TextView tvTitle = root.findViewById(R.id.tv_setting_account_title);
+        TextView tvSubtitle = root.findViewById(R.id.tv_setting_account_subtitle);
+        if (tvTitle == null || tvSubtitle == null) {
+            return;
+        }
+
+        if (!signedIn) {
+            if (ivGoogle != null) ivGoogle.setVisibility(View.VISIBLE);
+            if (cardAvatar != null) cardAvatar.setVisibility(View.GONE);
+            tvTitle.setText(R.string.setting_account_sign_in_title);
+            tvSubtitle.setText(R.string.setting_account_sign_in_subtitle);
+            return;
+        }
+
+        String safeName = displayName != null ? displayName.trim() : "";
+        String safeEmail = email != null ? email.trim() : "";
+        String resolvedTitle;
+        String resolvedSubtitle;
+        if (!safeName.isEmpty()) {
+            resolvedTitle = safeName;
+            resolvedSubtitle = !safeEmail.isEmpty()
+                    ? safeEmail
+                    : context.getString(R.string.setting_account_signed_in_subtitle);
+        } else if (!safeEmail.isEmpty()) {
+            resolvedTitle = safeEmail;
+            resolvedSubtitle = context.getString(R.string.setting_account_signed_in_subtitle);
+        } else {
+            resolvedTitle = context.getString(R.string.title_google_login);
+            resolvedSubtitle = context.getString(R.string.setting_account_signed_in_subtitle);
+        }
+
+        String initialSource = !safeName.isEmpty() ? safeName : safeEmail;
+        String initial = !initialSource.isEmpty()
+                ? initialSource.substring(0, 1).toUpperCase(Locale.getDefault())
+                : "G";
+
+        if (ivGoogle != null) ivGoogle.setVisibility(View.GONE);
+        if (cardAvatar != null) cardAvatar.setVisibility(View.VISIBLE);
+        if (tvAvatar != null) tvAvatar.setText(initial);
+        tvTitle.setText(resolvedTitle);
+        tvSubtitle.setText(resolvedSubtitle);
     }
 
     public static String formatNotificationTypesSummary(@NonNull Context context, @NonNull SettingsPreferences prefs) {
@@ -318,25 +414,36 @@ public final class SettingsUiHelper {
     }
 
     private static void showLanguageDialog(Context context, SettingsPreferences prefs, TextView tvLanguageValue) {
-        String[] options = new String[]{
-                context.getString(R.string.lang_system),
-                context.getString(R.string.lang_vietnamese),
-                context.getString(R.string.lang_english)
+        AppLanguage[] languages = new AppLanguage[]{
+                AppLanguage.SYSTEM,
+                AppLanguage.VI,
+                AppLanguage.EN,
+                AppLanguage.KO,
+                AppLanguage.JA,
+                AppLanguage.DE,
+                AppLanguage.ES,
+                AppLanguage.ID,
+                AppLanguage.IT,
+                AppLanguage.AR,
+                AppLanguage.HI,
+                AppLanguage.PT
         };
+        String[] options = new String[languages.length];
         AppLanguage current = prefs.getAppLanguage();
-        int checkedIndex = current == AppLanguage.VI ? 1 : (current == AppLanguage.EN ? 2 : 0);
+        int checkedIndex = 0;
+        for (int i = 0; i < languages.length; i++) {
+            options[i] = formatLanguageLabel(context, languages[i]);
+            if (languages[i] == current) {
+                checkedIndex = i;
+            }
+        }
 
         new MaterialAlertDialogBuilder(context)
                 .setTitle(R.string.section_language)
                 .setSingleChoiceItems(options, checkedIndex, (dialog, which) -> {
-                    AppLanguage selected;
-                    if (which == 1) {
-                        selected = AppLanguage.VI;
-                    } else if (which == 2) {
-                        selected = AppLanguage.EN;
-                    } else {
-                        selected = AppLanguage.SYSTEM;
-                    }
+                    AppLanguage selected = (which >= 0 && which < languages.length)
+                            ? languages[which]
+                            : AppLanguage.SYSTEM;
                     dialog.dismiss();
                     if (selected != prefs.getAppLanguage()) {
                         prefs.setAppLanguage(selected);
@@ -450,13 +557,33 @@ public final class SettingsUiHelper {
     }
 
     public static String formatLanguageLabel(@NonNull Context context, @NonNull AppLanguage language) {
-        if (language == AppLanguage.VI) {
-            return context.getString(R.string.lang_vietnamese);
+        switch (language) {
+            case VI:
+                return context.getString(R.string.lang_vietnamese);
+            case EN:
+                return context.getString(R.string.lang_english);
+            case KO:
+                return context.getString(R.string.lang_korean);
+            case JA:
+                return context.getString(R.string.lang_japanese);
+            case DE:
+                return context.getString(R.string.lang_german);
+            case ES:
+                return context.getString(R.string.lang_spanish);
+            case ID:
+                return context.getString(R.string.lang_indonesian);
+            case IT:
+                return context.getString(R.string.lang_italian);
+            case AR:
+                return context.getString(R.string.lang_arabic);
+            case HI:
+                return context.getString(R.string.lang_hindi);
+            case PT:
+                return context.getString(R.string.lang_portuguese);
+            case SYSTEM:
+            default:
+                return context.getString(R.string.lang_system);
         }
-        if (language == AppLanguage.EN) {
-            return context.getString(R.string.lang_english);
-        }
-        return context.getString(R.string.lang_system);
     }
 
     public static String formatTimerLabel(@NonNull Context context, int minutes) {

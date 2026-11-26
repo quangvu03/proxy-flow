@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,38 +21,85 @@ import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.RequestConfiguration;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Coordinates Google Mobile Ads SDK initialization and anchored adaptive banner lifecycle
- * in 100% Java with defensive error handling.
+ * in 100% Java with serialized SDK initialization and defensive error handling.
  */
 public final class AdMobBannerHelper {
 
     public static final String ADMOB_APP_ID = "ca-app-pub-4297682558932045~6174032153";
     public static final String BANNER_AD_UNIT_ID = "ca-app-pub-4297682558932045/2374835054";
 
-    private static final AtomicBoolean SDK_INITIALIZED = new AtomicBoolean(false);
+    private static final AtomicBoolean SDK_INIT_STARTED = new AtomicBoolean(false);
+    private static final AtomicBoolean SDK_READY = new AtomicBoolean(false);
+    private static final List<Runnable> PENDING_INIT_CALLBACKS = new ArrayList<>();
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     private AdMobBannerHelper() {}
 
     public static void initializeAsync(@NonNull Context context) {
-        if (!SDK_INITIALIZED.compareAndSet(false, true)) {
+        runWhenInitialized(context, null);
+    }
+
+    public static void runWhenInitialized(@NonNull Context context, @Nullable Runnable onReady) {
+        if (SDK_READY.get()) {
+            if (onReady != null) {
+                MAIN_HANDLER.post(onReady);
+            }
+            return;
+        }
+        if (onReady != null) {
+            synchronized (PENDING_INIT_CALLBACKS) {
+                if (SDK_READY.get()) {
+                    MAIN_HANDLER.post(onReady);
+                    return;
+                }
+                PENDING_INIT_CALLBACKS.add(onReady);
+            }
+        }
+        if (!SDK_INIT_STARTED.compareAndSet(false, true)) {
             return;
         }
         final Context appContext = context.getApplicationContext() != null
                 ? context.getApplicationContext()
                 : context;
-        Thread initThread = new Thread(() -> {
+        Runnable initTask = () -> {
             try {
-                MobileAds.initialize(appContext, initializationStatus -> {});
+                RequestConfiguration requestConfig = MobileAds.getRequestConfiguration()
+                        .toBuilder()
+                        .setTestDeviceIds(Collections.singletonList(AdRequest.DEVICE_ID_EMULATOR))
+                        .build();
+                MobileAds.setRequestConfiguration(requestConfig);
+                MobileAds.initialize(appContext, initializationStatus -> markSdkReady());
             } catch (Throwable ignored) {
-                // Keep app operational even if Google Play Services / WebView is unavailable in tests
+                // Ensure pending callbacks are not stranded in headless/test environments
+                markSdkReady();
             }
-        }, "ProxyFlow-AdMobInit");
-        initThread.setDaemon(true);
-        initThread.start();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            initTask.run();
+        } else {
+            MAIN_HANDLER.post(initTask);
+        }
+    }
+
+    private static void markSdkReady() {
+        SDK_READY.set(true);
+        List<Runnable> callbacks;
+        synchronized (PENDING_INIT_CALLBACKS) {
+            callbacks = new ArrayList<>(PENDING_INIT_CALLBACKS);
+            PENDING_INIT_CALLBACKS.clear();
+        }
+        for (Runnable r : callbacks) {
+            MAIN_HANDLER.post(r);
+        }
     }
 
     public static final class BannerController {
@@ -65,7 +114,6 @@ public final class AdMobBannerHelper {
             if (bannerContainer == null || destroyed) {
                 return;
             }
-            initializeAsync(activity);
 
             try {
                 AdView view = new AdView(activity);
@@ -92,7 +140,7 @@ public final class AdMobBannerHelper {
                 });
                 this.adView = view;
 
-                bannerContainer.post(() -> {
+                runWhenInitialized(activity, () -> bannerContainer.post(() -> {
                     if (destroyed || activity.isFinishing() || activity.isDestroyed() || this.adView == null) {
                         return;
                     }
@@ -106,7 +154,7 @@ public final class AdMobBannerHelper {
                             bannerWrapper.setVisibility(View.GONE);
                         }
                     }
-                });
+                }));
             } catch (Throwable ignored) {
                 if (bannerWrapper != null) {
                     bannerWrapper.setVisibility(View.GONE);

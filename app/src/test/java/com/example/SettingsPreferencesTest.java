@@ -13,14 +13,17 @@ import com.example.data.ProxyDatabaseHelper;
 import com.example.data.SettingsPreferences;
 import com.example.data.SettingsPreferences.AppLanguage;
 import com.example.data.SettingsPreferences.ThemeMode;
+import com.example.ui.SettingsUiHelper;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.Locale;
+
 /**
  * Unit tests verifying system-time theme mode, system language default,
- * and SQLite persistence in SettingsPreferences.
+ * multi-language localization resolution, and SQLite persistence in SettingsPreferences.
  */
 @RunWith(RobolectricTestRunner.class)
 public class SettingsPreferencesTest {
@@ -61,21 +64,58 @@ public class SettingsPreferencesTest {
     }
 
     @Test
-    public void appLanguage_defaultsToSystemAndPersistsInSqlite() {
+    public void appLanguage_defaultsToSystemAndPersistsAllLanguagesInSqlite() {
         Context context = ApplicationProvider.getApplicationContext();
         ProxyDatabaseHelper db = ProxyDatabaseHelper.getInstance(context);
         db.deleteSetting(SettingsPreferences.SQLITE_KEY_LANGUAGE_TAG);
 
         SettingsPreferences prefs = new SettingsPreferences(context);
         assertEquals(AppLanguage.SYSTEM, prefs.getAppLanguage());
+        assertEquals(AppLanguage.ID, AppLanguage.fromTag("in"));
+        assertEquals(AppLanguage.ID, AppLanguage.fromTag("ID"));
 
-        prefs.setAppLanguage(AppLanguage.VI);
-        assertEquals(AppLanguage.VI, prefs.getAppLanguage());
-        assertEquals("vi", db.getSetting(SettingsPreferences.SQLITE_KEY_LANGUAGE_TAG, ""));
+        AppLanguage[] allLanguages = new AppLanguage[]{
+                AppLanguage.VI,
+                AppLanguage.EN,
+                AppLanguage.KO,
+                AppLanguage.JA,
+                AppLanguage.DE,
+                AppLanguage.ES,
+                AppLanguage.ID,
+                AppLanguage.IT,
+                AppLanguage.AR,
+                AppLanguage.HI,
+                AppLanguage.PT
+        };
 
-        prefs.setAppLanguage(AppLanguage.EN);
-        assertEquals(AppLanguage.EN, prefs.getAppLanguage());
-        assertEquals("en", db.getSetting(SettingsPreferences.SQLITE_KEY_LANGUAGE_TAG, ""));
+        for (AppLanguage lang : allLanguages) {
+            prefs.setAppLanguage(lang);
+            assertEquals(lang, prefs.getAppLanguage());
+            assertEquals(lang.getTag(), db.getSetting(SettingsPreferences.SQLITE_KEY_LANGUAGE_TAG, ""));
+            assertFalse(SettingsUiHelper.formatLanguageLabel(context, lang).trim().isEmpty());
+
+            Locale resolved = SettingsPreferences.resolveEffectiveLocale(context);
+            assertEquals(Locale.forLanguageTag(lang.getTag()).getLanguage(), resolved.getLanguage());
+        }
+
+        prefs.setAppLanguage(AppLanguage.KO);
+        assertEquals("설정", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.JA);
+        assertEquals("設定", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.DE);
+        assertEquals("Einstellungen", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.ES);
+        assertEquals("Ajustes", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.ID);
+        assertEquals("Pengaturan", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.IT);
+        assertEquals("Impostazioni", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.AR);
+        assertEquals("الإعدادات", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.HI);
+        assertEquals("सेटिंग्स", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
+        prefs.setAppLanguage(AppLanguage.PT);
+        assertEquals("Definições", SettingsPreferences.getLocalizedContext(context).getString(R.string.title_settings));
     }
 
     @Test

@@ -270,6 +270,15 @@
     <string name="section_language_subtitle">Defaults to system language • Custom choice is saved in SQLite</string>
     <string name="lang_vietnamese">Tiếng Việt (Vietnamese)</string>
     <string name="lang_english">English</string>
+    <string name="lang_korean">한국어 (Korean)</string>
+    <string name="lang_japanese">日本語 (Japanese)</string>
+    <string name="lang_german">Deutsch (German)</string>
+    <string name="lang_spanish">Español (Spanish)</string>
+    <string name="lang_indonesian">Bahasa Indonesia (Indonesian)</string>
+    <string name="lang_italian">Italiano (Italian)</string>
+    <string name="lang_arabic">العربية (Arabic)</string>
+    <string name="lang_hindi">हिन्दी (Hindi)</string>
+    <string name="lang_portuguese">Português (Portuguese)</string>
     <string name="lang_system">Follow System Language</string>
     <string name="setting_auto_stop_title">Auto stop</string>
     <string name="setting_auto_stop_subtitle">Automatically stop service when disconnected</string>
@@ -408,7 +417,6 @@
     <string name="title_google_only_login">Sign in with Google</string>
     <string name="action_continue_with_google">Continue with Google</string>
     <string name="badge_signed_in_google">Verified Google Account</string>
-    <string name="label_google_uid">UID: %1$s</string>
     <string name="action_switch_google_account">Switch Google account</string>
     <string name="action_sign_out">Sign out</string>
     <string name="msg_google_login_success">Signed in as %1$s</string>
@@ -416,6 +424,10 @@
     <string name="msg_google_login_failed">Google sign-in failed: %1$s</string>
     <string name="msg_google_config_missing">Google Sign-In Web Client ID is missing</string>
     <string name="msg_signed_out">Signed out of Google account</string>
+    <string name="settings_group_account">Account</string>
+    <string name="setting_account_sign_in_title">Sign in with Google account</string>
+    <string name="setting_account_sign_in_subtitle">Sign in with your Google account to sync across devices</string>
+    <string name="setting_account_signed_in_subtitle">Signed in with Google • Tap to view account</string>
 
     <!-- Localized Proxy & VPN Connection Logs -->
     <string name="log_proxy_updated">Updated Proxy %1$s</string>

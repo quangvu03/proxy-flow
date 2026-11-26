@@ -253,15 +253,6 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/tv_google_uid"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:fontFamily="monospace"
-                        android:textColor="@color/md_theme_onSurfaceVariant"
-                        android:textSize="11sp" />
-
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_switch_google_account"
                         style="@style/Widget.Material3.Button.OutlinedButton"

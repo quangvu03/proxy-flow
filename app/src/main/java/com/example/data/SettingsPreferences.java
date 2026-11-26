@@ -43,7 +43,16 @@ public class SettingsPreferences {
     public enum AppLanguage {
         SYSTEM("system"),
         VI("vi"),
-        EN("en");
+        EN("en"),
+        KO("ko"),
+        JA("ja"),
+        DE("de"),
+        ES("es"),
+        ID("id"),
+        IT("it"),
+        AR("ar"),
+        HI("hi"),
+        PT("pt");
 
         private final String tag;
 
@@ -56,8 +65,16 @@ public class SettingsPreferences {
         }
 
         public static AppLanguage fromTag(String tag) {
-            if ("vi".equalsIgnoreCase(tag)) return VI;
-            if ("en".equalsIgnoreCase(tag)) return EN;
+            if (tag == null) return SYSTEM;
+            String normalized = tag.trim().toLowerCase(Locale.ROOT);
+            if ("in".equals(normalized)) {
+                return ID;
+            }
+            for (AppLanguage lang : values()) {
+                if (lang.tag.equals(normalized)) {
+                    return lang;
+                }
+            }
             return SYSTEM;
         }
     }
@@ -320,8 +337,8 @@ public class SettingsPreferences {
         if (language == AppLanguage.EN) {
             return Locale.ENGLISH;
         }
-        if (language == AppLanguage.VI) {
-            return new Locale("vi");
+        if (language != null && language != AppLanguage.SYSTEM) {
+            return Locale.forLanguageTag(language.getTag());
         }
         LocaleListCompat appLocales = AppCompatDelegate.getApplicationLocales();
         if (!appLocales.isEmpty() && appLocales.get(0) != null) {

@@ -248,6 +248,12 @@ public class LocalProxyServer {
                 OutputStream upstreamOut = upstream.getOutputStream();
                 InputStream upstreamIn = upstream.getInputStream();
 
+                notifySuccess(proxy.getId());
+                if (tListener != null && !targetDisplay.isEmpty()) {
+                    long handshakeMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+                    tListener.onTunnelEstablished(callerPkg, methodTag, targetDisplay, handshakeMs);
+                }
+
                 long initialSent = 0L;
                 long initialRecv = 0L;
                 if (isConnect) {
@@ -263,11 +269,6 @@ public class LocalProxyServer {
                     upstreamOut.flush();
                     bytesOut.addAndGet(directHttpHeaders.length);
                     initialSent = directHttpHeaders.length;
-                }
-                notifySuccess(proxy.getId());
-                if (tListener != null && !targetDisplay.isEmpty()) {
-                    long handshakeMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
-                    tListener.onTunnelEstablished(callerPkg, methodTag, targetDisplay, handshakeMs);
                 }
                 long[] counts = relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut,
                         initialSent, initialRecv);
@@ -371,9 +372,6 @@ public class LocalProxyServer {
 
                     byte[] upstreamRespHeaders = head.getRawBytes();
                     int statusCode = head.getStatusCode();
-                    clientOut.write(upstreamRespHeaders);
-                    clientOut.flush();
-                    bytesIn.addAndGet(upstreamRespHeaders.length);
 
                     if (statusCode == 407) {
                         if (proxy.hasAuth()) {
@@ -383,6 +381,9 @@ public class LocalProxyServer {
                         if (tListener != null && !targetDisplay.isEmpty()) {
                             tListener.onSendFailed(callerPkg, methodTag, targetDisplay, "HTTP 407");
                         }
+                        clientOut.write(upstreamRespHeaders);
+                        clientOut.flush();
+                        bytesIn.addAndGet(upstreamRespHeaders.length);
                         drainResponseTailToClient(upstreamIn, clientOut, head);
                     } else if (isConnect && (statusCode < 200 || statusCode >= 300)) {
                         if (statusCode >= 500 && statusCode < 600) {
@@ -391,6 +392,9 @@ public class LocalProxyServer {
                         if (tListener != null && !targetDisplay.isEmpty()) {
                             tListener.onSendFailed(callerPkg, methodTag, targetDisplay, "HTTP " + statusCode);
                         }
+                        clientOut.write(upstreamRespHeaders);
+                        clientOut.flush();
+                        bytesIn.addAndGet(upstreamRespHeaders.length);
                     } else {
                         if (statusCode >= 500 && statusCode < 600) {
                             notifyFailure(proxy.getId(), "Lỗi máy chủ Proxy (HTTP " + statusCode + ")");
@@ -401,6 +405,9 @@ public class LocalProxyServer {
                             long handshakeMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
                             tListener.onTunnelEstablished(callerPkg, methodTag, targetDisplay, handshakeMs);
                         }
+                        clientOut.write(upstreamRespHeaders);
+                        clientOut.flush();
+                        bytesIn.addAndGet(upstreamRespHeaders.length);
                         long[] counts = relayBidirectional(client, upstream, clientIn, clientOut, upstreamIn, upstreamOut,
                                 totalSent, upstreamRespHeaders.length);
                         if (tListener != null && !targetDisplay.isEmpty()) {
