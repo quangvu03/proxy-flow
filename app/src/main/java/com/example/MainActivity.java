@@ -249,10 +249,11 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         super.onResume();
         bannerController.onResume();
         updateTopLoginPill(GoogleAuthManager.getCurrentUser(this));
-        SettingsPreferences settingsPrefs = new SettingsPreferences(this);
-        if (settingsPrefs.getThemeMode() == SettingsPreferences.ThemeMode.SYSTEM_TIME) {
-            SettingsPreferences.applyThemeMode(SettingsPreferences.ThemeMode.SYSTEM_TIME);
-        }
+        getWindow().getDecorView().post(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                SettingsPreferences.syncThemeAndLocaleIfNeeded(this);
+            }
+        });
     }
 
     @Override

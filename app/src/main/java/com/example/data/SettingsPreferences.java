@@ -301,6 +301,20 @@ public class SettingsPreferences {
         applyLanguage(settings.getAppLanguage());
     }
 
+    public static void syncThemeAndLocaleIfNeeded(Context context) {
+        SettingsPreferences settings = new SettingsPreferences(context);
+        applyThemeMode(settings.getThemeMode());
+        AppLanguage saved = settings.getAppLanguage();
+        LocaleListCompat current = AppCompatDelegate.getApplicationLocales();
+        AppLanguage active = AppLanguage.SYSTEM;
+        if (!current.isEmpty() && current.get(0) != null) {
+            active = AppLanguage.fromTag(current.get(0).getLanguage());
+        }
+        if (saved != active) {
+            applyLanguage(saved);
+        }
+    }
+
     public static void applyThemeMode(ThemeMode mode) {
         int currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         int targetNightMode = resolveNightMode(mode, currentHour);

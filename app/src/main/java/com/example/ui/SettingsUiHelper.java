@@ -2,18 +2,23 @@ package com.example.ui;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.text.InputType;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 
 import com.example.BuildConfig;
 import com.example.R;
@@ -29,6 +34,7 @@ import com.example.model.ProxyLogEntry;
 import com.example.network.PrivateNetworkMatcher;
 import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyVpnService;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
@@ -124,8 +130,8 @@ public final class SettingsUiHelper {
                     context.startActivity(new Intent(context, NotificationsSettingsActivity.class)));
         }
 
-        rowTheme.setOnClickListener(v -> showThemeDialog(context, settingsPrefs, tvThemeValue));
-        rowLanguage.setOnClickListener(v -> showLanguageDialog(context, settingsPrefs, tvLanguageValue));
+        rowTheme.setOnClickListener(v -> showThemeDialog(context));
+        rowLanguage.setOnClickListener(v -> showLanguageDialog(context));
         rowVpnTimer.setOnClickListener(v -> showVpnTimerDialog(context, settingsPrefs, tvVpnTimerValue));
 
         switchFirewall.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -382,77 +388,82 @@ public final class SettingsUiHelper {
         }
     }
 
-    private static void showThemeDialog(Context context, SettingsPreferences prefs, TextView tvThemeValue) {
-        String[] options = new String[]{
-                context.getString(R.string.theme_system),
-                context.getString(R.string.theme_light),
-                context.getString(R.string.theme_dark)
-        };
-        ThemeMode current = prefs.getThemeMode();
-        int checkedIndex = current == ThemeMode.LIGHT ? 1 : (current == ThemeMode.DARK ? 2 : 0);
-
-        new MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.section_theme)
-                .setSingleChoiceItems(options, checkedIndex, (dialog, which) -> {
-                    ThemeMode selected;
-                    if (which == 1) {
-                        selected = ThemeMode.LIGHT;
-                    } else if (which == 2) {
-                        selected = ThemeMode.DARK;
-                    } else {
-                        selected = ThemeMode.SYSTEM_TIME;
-                    }
-                    dialog.dismiss();
-                    if (selected != prefs.getThemeMode()) {
-                        prefs.setThemeMode(selected);
-                        tvThemeValue.setText(formatThemeLabel(context, selected));
-                        SettingsPreferences.applyThemeMode(selected);
-                    }
-                })
-                .setNegativeButton(R.string.action_cancel, null)
-                .show();
+    private static void showThemeDialog(Context context) {
+        context.startActivity(AppearancePickerActivity.createIntent(
+                context, AppearancePickerActivity.MODE_THEME));
     }
 
-    private static void showLanguageDialog(Context context, SettingsPreferences prefs, TextView tvLanguageValue) {
-        AppLanguage[] languages = new AppLanguage[]{
-                AppLanguage.SYSTEM,
-                AppLanguage.VI,
-                AppLanguage.EN,
-                AppLanguage.KO,
-                AppLanguage.JA,
-                AppLanguage.DE,
-                AppLanguage.ES,
-                AppLanguage.ID,
-                AppLanguage.IT,
-                AppLanguage.AR,
-                AppLanguage.HI,
-                AppLanguage.PT
-        };
-        String[] options = new String[languages.length];
-        AppLanguage current = prefs.getAppLanguage();
-        int checkedIndex = 0;
-        for (int i = 0; i < languages.length; i++) {
-            options[i] = formatLanguageLabel(context, languages[i]);
-            if (languages[i] == current) {
-                checkedIndex = i;
-            }
+    private static void showLanguageDialog(Context context) {
+        context.startActivity(AppearancePickerActivity.createIntent(
+                context, AppearancePickerActivity.MODE_LANGUAGE));
+    }
+
+    static MaterialCardView addPickerOptionCard(@NonNull Context context,
+                                                @NonNull LinearLayout container,
+                                                @DrawableRes int iconRes,
+                                                @Nullable String badgeText,
+                                                @NonNull String title,
+                                                @Nullable String subtitle,
+                                                boolean selected,
+                                                @NonNull Runnable onSelect) {
+        LayoutInflater inflater = LayoutInflater.from(context);
+        MaterialCardView card = (MaterialCardView) inflater.inflate(
+                R.layout.item_settings_picker_option, container, false);
+
+        MaterialCardView leadingCard = card.findViewById(R.id.card_option_leading);
+        ImageView ivIcon = card.findViewById(R.id.iv_option_icon);
+        TextView tvBadge = card.findViewById(R.id.tv_option_badge);
+        TextView tvTitle = card.findViewById(R.id.tv_option_title);
+        TextView tvSubtitle = card.findViewById(R.id.tv_option_subtitle);
+        ImageView ivSelected = card.findViewById(R.id.iv_option_selected);
+
+        tvTitle.setText(title);
+        if (subtitle != null && !subtitle.trim().isEmpty()) {
+            tvSubtitle.setText(subtitle);
+            tvSubtitle.setVisibility(View.VISIBLE);
+        } else {
+            tvSubtitle.setVisibility(View.GONE);
         }
 
-        new MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.section_language)
-                .setSingleChoiceItems(options, checkedIndex, (dialog, which) -> {
-                    AppLanguage selected = (which >= 0 && which < languages.length)
-                            ? languages[which]
-                            : AppLanguage.SYSTEM;
-                    dialog.dismiss();
-                    if (selected != prefs.getAppLanguage()) {
-                        prefs.setAppLanguage(selected);
-                        tvLanguageValue.setText(formatLanguageLabel(context, selected));
-                        SettingsPreferences.applyLanguage(selected);
-                    }
-                })
-                .setNegativeButton(R.string.action_cancel, null)
-                .show();
+        int density = Math.round(context.getResources().getDisplayMetrics().density);
+        if (selected) {
+            card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.md_theme_primaryContainer));
+            card.setStrokeColor(ContextCompat.getColor(context, R.color.md_theme_primary));
+            card.setStrokeWidth(2 * density);
+            leadingCard.setCardBackgroundColor(ContextCompat.getColor(context, R.color.md_theme_primary));
+            tvTitle.setTextColor(ContextCompat.getColor(context, R.color.md_theme_onPrimaryContainer));
+            tvSubtitle.setTextColor(ContextCompat.getColor(context, R.color.md_theme_onPrimaryContainer));
+            ivSelected.setVisibility(View.VISIBLE);
+        } else {
+            card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.md_theme_surfaceContainerHigh));
+            card.setStrokeColor(ContextCompat.getColor(context, R.color.md_theme_outline));
+            card.setStrokeWidth(density);
+            leadingCard.setCardBackgroundColor(ContextCompat.getColor(context, R.color.md_theme_surfaceVariant));
+            tvTitle.setTextColor(ContextCompat.getColor(context, R.color.md_theme_onSurface));
+            tvSubtitle.setTextColor(ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant));
+            ivSelected.setVisibility(View.GONE);
+        }
+
+        if (iconRes != 0) {
+            ivIcon.setImageResource(iconRes);
+            int tintColor = ContextCompat.getColor(context,
+                    selected ? R.color.md_theme_onPrimary : R.color.md_theme_onSurfaceVariant);
+            ivIcon.setImageTintList(ColorStateList.valueOf(tintColor));
+            ivIcon.setVisibility(View.VISIBLE);
+            tvBadge.setVisibility(View.GONE);
+        } else {
+            ivIcon.setVisibility(View.GONE);
+            tvBadge.setText(badgeText != null ? badgeText : "");
+            int badgeTextColor = ContextCompat.getColor(context,
+                    selected ? R.color.md_theme_onPrimary : R.color.md_theme_onSurfaceVariant);
+            tvBadge.setTextColor(badgeTextColor);
+            tvBadge.setVisibility(View.VISIBLE);
+        }
+
+        card.setContentDescription(title);
+        card.setOnClickListener(v -> onSelect.run());
+        container.addView(card);
+        return card;
     }
 
     private static void showVpnTimerDialog(Context context, SettingsPreferences prefs, TextView tvVpnTimerValue) {

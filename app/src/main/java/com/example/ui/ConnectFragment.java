@@ -7,21 +7,29 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.R;
 import com.example.model.AppProxyRule;
 import com.example.model.ConnectionStatus;
 import com.example.model.ProxyConfig;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -39,6 +47,7 @@ public class ConnectFragment extends Fragment {
 
     private ProxyViewModel viewModel;
 
+    private View layoutActiveProxySelector;
     private TextView tvStatusBadge;
     private TextView tvActiveTitle;
     private TextView tvActiveAddress;
@@ -64,6 +73,9 @@ public class ConnectFragment extends Fragment {
 
     private ConnectionStatus latestStatus;
     private ProxyConfig latestSelectedProxy;
+    private List<ProxyConfig> latestProxies = new ArrayList<>();
+    @Nullable
+    private AlertDialog proxyPickerDialog;
 
     @Nullable
     @Override
@@ -77,6 +89,7 @@ public class ConnectFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(ProxyViewModel.class);
 
+        layoutActiveProxySelector = view.findViewById(R.id.layout_active_proxy_selector);
         tvStatusBadge = view.findViewById(R.id.tv_status_badge);
         tvActiveTitle = view.findViewById(R.id.tv_active_proxy_title);
         tvActiveAddress = view.findViewById(R.id.tv_active_proxy_address);
@@ -99,6 +112,10 @@ public class ConnectFragment extends Fragment {
         btnGoToProxies = view.findViewById(R.id.btn_go_to_proxies);
         tvAppRulesSummary = view.findViewById(R.id.tv_app_rules_summary);
         btnGoToApps = view.findViewById(R.id.btn_go_to_apps);
+
+        if (layoutActiveProxySelector != null) {
+            layoutActiveProxySelector.setOnClickListener(v -> showSelectProxyDialog());
+        }
 
         View cardDiagnostics = view.findViewById(R.id.card_node_diagnostics);
         if (cardDiagnostics != null) {
@@ -137,8 +154,109 @@ public class ConnectFragment extends Fragment {
             renderStatus();
         });
 
-        viewModel.getProxies().observe(getViewLifecycleOwner(), this::renderPoolSummary);
+        viewModel.getProxies().observe(getViewLifecycleOwner(), proxies -> {
+            latestProxies = proxies != null ? proxies : new ArrayList<>();
+            renderPoolSummary(latestProxies);
+        });
         viewModel.getAppProxyRule().observe(getViewLifecycleOwner(), this::renderAppRuleSummary);
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (proxyPickerDialog != null && proxyPickerDialog.isShowing()) {
+            proxyPickerDialog.dismiss();
+        }
+        proxyPickerDialog = null;
+        super.onDestroyView();
+    }
+
+    private void showSelectProxyDialog() {
+        if (!isAdded()) {
+            return;
+        }
+        if (latestStatus != null && latestStatus.getState() == ConnectionStatus.State.CONNECTING) {
+            return;
+        }
+        if (proxyPickerDialog != null && proxyPickerDialog.isShowing()) {
+            proxyPickerDialog.dismiss();
+        }
+
+        View dialogView = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_select_proxy, null);
+        TextView tvSubtitle = dialogView.findViewById(R.id.tv_select_proxy_subtitle);
+        RecyclerView rvProxies = dialogView.findViewById(R.id.rv_proxy_picker);
+        View emptyView = dialogView.findViewById(R.id.layout_proxy_picker_empty);
+        MaterialButton btnAdd = dialogView.findViewById(R.id.btn_picker_add_proxy);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btn_picker_cancel);
+
+        List<ProxyConfig> items = new ArrayList<>(latestProxies);
+        if (items.isEmpty()) {
+            tvSubtitle.setVisibility(View.GONE);
+            rvProxies.setVisibility(View.GONE);
+            emptyView.setVisibility(View.VISIBLE);
+        } else {
+            tvSubtitle.setVisibility(View.VISIBLE);
+            tvSubtitle.setText(getString(R.string.desc_select_proxy_dialog, items.size()));
+            rvProxies.setVisibility(View.VISIBLE);
+            emptyView.setVisibility(View.GONE);
+
+            long currentActiveId = -1L;
+            if (latestStatus != null && latestStatus.isRunning() && latestStatus.getActiveProxy() != null) {
+                currentActiveId = latestStatus.getActiveProxy().getId();
+            } else if (latestSelectedProxy != null) {
+                currentActiveId = latestSelectedProxy.getId();
+            }
+
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            if (rvProxies.getLayoutParams() instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams lp =
+                        (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) rvProxies.getLayoutParams();
+                int minMaxHeight = Math.round(240f * dm.density);
+                int maxCapHeight = Math.round(540f * dm.density);
+                int viewportMaxHeight = Math.round(dm.heightPixels * 0.58f);
+                lp.matchConstraintMaxHeight = Math.max(minMaxHeight, Math.min(maxCapHeight, viewportMaxHeight));
+                rvProxies.setLayoutParams(lp);
+            }
+
+            rvProxies.setLayoutManager(new LinearLayoutManager(requireContext()));
+            rvProxies.setAdapter(new ProxyPickerAdapter(items, currentActiveId, selected -> {
+                viewModel.selectProxy(selected.getId());
+                Toast.makeText(
+                        requireContext(),
+                        getString(R.string.msg_proxy_selected, selected.getDisplayTitle()),
+                        Toast.LENGTH_SHORT
+                ).show();
+                if (proxyPickerDialog != null) {
+                    proxyPickerDialog.dismiss();
+                }
+            }));
+        }
+
+        btnAdd.setOnClickListener(v -> {
+            if (proxyPickerDialog != null) {
+                proxyPickerDialog.dismiss();
+            }
+            startActivity(new Intent(requireContext(), AddEditProxyActivity.class));
+        });
+
+        btnCancel.setOnClickListener(v -> {
+            if (proxyPickerDialog != null) {
+                proxyPickerDialog.dismiss();
+            }
+        });
+
+        proxyPickerDialog = new MaterialAlertDialogBuilder(requireContext())
+                .setView(dialogView)
+                .create();
+        proxyPickerDialog.show();
+
+        android.view.Window window = proxyPickerDialog.getWindow();
+        if (window != null) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            int maxDialogWidth = Math.round(560f * dm.density);
+            int targetWidth = Math.min(Math.round(dm.widthPixels * 0.94f), maxDialogWidth);
+            window.setLayout(targetWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     private void openIpCheckScreen(boolean autoCheckCurrentIp) {
@@ -305,5 +423,132 @@ public class ConnectFragment extends Fragment {
             return String.format(Locale.US, "%02d:%02d:%02d", hours, mins, secs);
         }
         return String.format(Locale.US, "%02d:%02d", mins, secs);
+    }
+
+    private interface OnPickerProxySelectedListener {
+        void onSelected(@NonNull ProxyConfig proxy);
+    }
+
+    private static final class ProxyPickerAdapter
+            extends RecyclerView.Adapter<ProxyPickerAdapter.PickerViewHolder> {
+
+        private final List<ProxyConfig> items;
+        private final long activeProxyId;
+        private final OnPickerProxySelectedListener listener;
+
+        ProxyPickerAdapter(@NonNull List<ProxyConfig> items,
+                           long activeProxyId,
+                           @NonNull OnPickerProxySelectedListener listener) {
+            this.items = items;
+            this.activeProxyId = activeProxyId;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public PickerViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_proxy_picker_option, parent, false);
+            return new PickerViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull PickerViewHolder holder, int position) {
+            holder.bind(items.get(position), activeProxyId, listener);
+        }
+
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
+
+        static final class PickerViewHolder extends RecyclerView.ViewHolder {
+            private final MaterialCardView card;
+            private final View dotStatus;
+            private final TextView tvTitle;
+            private final TextView tvAddress;
+            private final TextView tvLatency;
+            private final TextView tvMeta;
+            private final ImageView ivSelected;
+
+            PickerViewHolder(@NonNull View itemView) {
+                super(itemView);
+                card = itemView.findViewById(R.id.card_proxy_picker_option);
+                dotStatus = itemView.findViewById(R.id.view_picker_status_dot);
+                tvTitle = itemView.findViewById(R.id.tv_picker_proxy_title);
+                tvAddress = itemView.findViewById(R.id.tv_picker_proxy_address);
+                tvLatency = itemView.findViewById(R.id.tv_picker_latency_badge);
+                tvMeta = itemView.findViewById(R.id.tv_picker_meta);
+                ivSelected = itemView.findViewById(R.id.iv_picker_selected);
+            }
+
+            void bind(@NonNull ProxyConfig proxy,
+                      long activeProxyId,
+                      @NonNull OnPickerProxySelectedListener listener) {
+                android.content.Context ctx = itemView.getContext();
+                boolean isSelected = proxy.getId() == activeProxyId;
+                float density = ctx.getResources().getDisplayMetrics().density;
+
+                tvTitle.setText(proxy.getDisplayTitle());
+                tvAddress.setText(proxy.getSchemePrefix() + proxy.getAddressDisplay());
+
+                long lat = proxy.getLatencyMs();
+                if (lat == ProxyConfig.LATENCY_FAILED) {
+                    dotStatus.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error)));
+                    tvLatency.setText(R.string.latency_failed);
+                    tvLatency.setTextColor(ContextCompat.getColor(ctx, R.color.status_error));
+                    tvLatency.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
+                } else if (lat == ProxyConfig.LATENCY_UNTESTED) {
+                    dotStatus.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle)));
+                    tvLatency.setText(R.string.latency_untested);
+                    tvLatency.setTextColor(ContextCompat.getColor(ctx, R.color.status_idle));
+                    tvLatency.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
+                } else if (lat <= 250) {
+                    dotStatus.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_connected)));
+                    tvLatency.setText(ctx.getString(R.string.latency_ms, lat));
+                    tvLatency.setTextColor(ContextCompat.getColor(ctx, R.color.status_connected));
+                    tvLatency.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_connected_bg)));
+                } else {
+                    dotStatus.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_switching)));
+                    tvLatency.setText(ctx.getString(R.string.latency_ms, lat));
+                    tvLatency.setTextColor(ContextCompat.getColor(ctx, R.color.status_switching));
+                    tvLatency.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_switching_bg)));
+                }
+
+                String metaText;
+                if (!proxy.getExitIp().isEmpty()) {
+                    metaText = proxy.getCountry().isEmpty()
+                            ? proxy.getExitIp()
+                            : proxy.getCountry() + " • " + proxy.getExitIp();
+                } else {
+                    metaText = proxy.getAuthDisplaySummary(ctx);
+                }
+                tvMeta.setText(metaText);
+
+                if (isSelected) {
+                    card.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
+                    card.setStrokeWidth((int) (2f * density));
+                    ivSelected.setImageResource(R.drawable.ic_check_circle);
+                    ivSelected.setImageTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.md_theme_primary)));
+                } else {
+                    card.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_outline));
+                    card.setStrokeWidth((int) (1f * density));
+                    ivSelected.setImageResource(R.drawable.ic_radio_unchecked);
+                    ivSelected.setImageTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.md_theme_onSurfaceVariant)));
+                }
+
+                card.setOnClickListener(v -> listener.onSelected(proxy));
+            }
+        }
     }
 }

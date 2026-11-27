@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">Hubungkan</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">Status Proxy VPN</string>
     <string name="notif_channel_desc">Menampilkan status koneksi Proxy VPN tetap</string>
-    <string name="notif_title_connected">ProxyFlow Aktif • %1$s</string>
+    <string name="notif_title_connected">TopProxy Aktif • %1$s</string>
     <string name="notif_text_connected">Port lokal :%1$d • %2$s</string>
     <string name="notif_action_stop">Hentikan</string>
     <string name="msg_no_proxy_to_connect">Tambahkan minimal 1 Proxy sebelum menghubungkan</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">Acara &amp; Peringatan Proxy</string>
     <string name="notif_events_channel_desc">Peringatan status koneksi, berakhirnya timer VPN, dan blokir firewall</string>
     <string name="notif_minimal_running">Layanan Proxy VPN berjalan di latar belakang</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • sisa %1$s</string>
+    <string name="notif_title_timer_countdown">TopProxy • sisa %1$s</string>
     <string name="notif_title_timer_only">Timer VPN • sisa %1$s</string>
     <string name="notif_subtext_countdown">Hitung mundur %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Berhenti dalam %3$s</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN Terhubung</string>
+    <string name="notif_event_connected_title">TopProxy VPN Terhubung</string>
     <string name="notif_event_connected_body">Merutekan lalu lintas melalui %1$s</string>
     <string name="notif_event_connected_timer_body">Melalui %1$s • Timer %2$d mnt</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN Terputus</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN Terputus</string>
     <string name="notif_event_disconnected_body">Sesi perutean Proxy VPN dihentikan</string>
-    <string name="notif_event_autostop_title">ProxyFlow Berhenti Otomatis</string>
+    <string name="notif_event_autostop_title">TopProxy Berhenti Otomatis</string>
     <string name="notif_event_timer_expired_title">Timer VPN Berakhir</string>
     <string name="notif_event_timer_expired_body">Layanan Proxy VPN berhenti otomatis setelah %1$s</string>
     <string name="notif_event_firewall_title">Peringatan Firewall</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">Tidak ada kategori yang aktif</string>
     <string name="setting_notification_types_summary">Aktif %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">Atur Kategori Notifikasi</string>
-    <string name="desc_notification_types_dialog">Nyalakan atau matikan setiap jenis notifikasi ProxyFlow secara terpisah.</string>
+    <string name="desc_notification_types_dialog">Nyalakan atau matikan setiap jenis notifikasi TopProxy secara terpisah.</string>
     <string name="notif_type_vpn_status">Status VPN di bilah notifikasi</string>
     <string name="notif_type_vpn_status_desc">Tampilkan alamat Proxy aktif, port lokal, dan tombol putus cepat</string>
     <string name="notif_type_vpn_status_short">Status VPN</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">Izin notifikasi ditolak</string>
     <string name="action_test_notification">Kirim notifikasi uji</string>
     <string name="msg_test_notification_sent">Notifikasi uji terkirim</string>
-    <string name="notif_test_title">Notifikasi Uji ProxyFlow</string>
+    <string name="notif_test_title">Notifikasi Uji TopProxy</string>
     <string name="notif_test_body">Notifikasi dan peringatan hitung mundur VPN berfungsi dengan baik.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Versi: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">Ganti</string>
+    <string name="title_select_proxy_dialog">Pilih Proxy</string>
+    <string name="desc_select_proxy_dialog">Ketuk proxy untuk langsung memilihnya (%1$d tersimpan)</string>
+    <string name="msg_proxy_selected">Proxy dipilih: %1$s</string>
+    <string name="msg_empty_proxy_picker">Belum ada proxy tersimpan. Tambahkan proxy untuk terhubung.</string>
+    <string name="cd_select_active_proxy">Pilih atau ganti proxy aktif</string>
 </resources>

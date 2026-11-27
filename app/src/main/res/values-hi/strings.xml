@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">कनेक्ट</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">प्रॉक्सी VPN स्थिति</string>
     <string name="notif_channel_desc">स्थिर प्रॉक्सी VPN कनेक्शन स्थिति दिखाता है</string>
-    <string name="notif_title_connected">ProxyFlow सक्रिय • %1$s</string>
+    <string name="notif_title_connected">TopProxy सक्रिय • %1$s</string>
     <string name="notif_text_connected">स्थानीय पोर्ट :%1$d • %2$s</string>
     <string name="notif_action_stop">रोकें</string>
     <string name="msg_no_proxy_to_connect">कनेक्ट करने से पहले कृपया कम से कम 1 प्रॉक्सी जोड़ें</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">प्रॉक्सी ईवेंट और अलर्ट</string>
     <string name="notif_events_channel_desc">कनेक्शन स्थिति, VPN टाइमर समाप्ति और फ़ायरवॉल ब्लॉक के अलर्ट</string>
     <string name="notif_minimal_running">प्रॉक्सी VPN सेवा पृष्ठभूमि में चल रही है</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • %1$s शेष</string>
+    <string name="notif_title_timer_countdown">TopProxy • %1$s शेष</string>
     <string name="notif_title_timer_only">VPN टाइमर • %1$s शेष</string>
     <string name="notif_subtext_countdown">काउंटडाउन %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • %3$s में स्वतः बंद</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN कनेक्टेड</string>
+    <string name="notif_event_connected_title">TopProxy VPN कनेक्टेड</string>
     <string name="notif_event_connected_body">%1$s के माध्यम से ट्रैफ़िक रूट हो रहा है</string>
     <string name="notif_event_connected_timer_body">%1$s के माध्यम से रूटिंग • टाइमर %2$d मिनट</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN डिस्कनेक्टेड</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN डिस्कनेक्टेड</string>
     <string name="notif_event_disconnected_body">प्रॉक्सी VPN रूटिंग सत्र रोक दिया गया</string>
-    <string name="notif_event_autostop_title">ProxyFlow स्वतः बंद हो गया</string>
+    <string name="notif_event_autostop_title">TopProxy स्वतः बंद हो गया</string>
     <string name="notif_event_timer_expired_title">VPN टाइमर समाप्त</string>
     <string name="notif_event_timer_expired_body">प्रॉक्सी VPN सेवा %1$s के बाद स्वतः बंद हो गई</string>
     <string name="notif_event_firewall_title">फ़ायरवॉल अलर्ट</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">कोई सूचना श्रेणी सक्षम नहीं है</string>
     <string name="setting_notification_types_summary">सक्षम %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">सूचना श्रेणियाँ टॉगल करें</string>
-    <string name="desc_notification_types_dialog">प्रत्येक प्रकार की ProxyFlow सूचना को अलग-अलग चालू या बंद करें।</string>
+    <string name="desc_notification_types_dialog">प्रत्येक प्रकार की TopProxy सूचना को अलग-अलग चालू या बंद करें।</string>
     <string name="notif_type_vpn_status">सूचना बार में VPN स्थिति</string>
     <string name="notif_type_vpn_status_desc">सक्रिय प्रॉक्सी पता, स्थानीय पोर्ट और त्वरित डिस्कनेक्ट बटन दिखाएं</string>
     <string name="notif_type_vpn_status_short">VPN स्थिति</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">सूचना अनुमति अस्वीकृत</string>
     <string name="action_test_notification">परीक्षण सूचना भेजें</string>
     <string name="msg_test_notification_sent">परीक्षण सूचना भेजी गई</string>
-    <string name="notif_test_title">ProxyFlow परीक्षण सूचना</string>
+    <string name="notif_test_title">TopProxy परीक्षण सूचना</string>
     <string name="notif_test_body">सूचनाएं और VPN काउंटडाउन अलर्ट ठीक से काम कर रहे हैं।</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">संस्करण: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">बदलें</string>
+    <string name="title_select_proxy_dialog">प्रॉक्सी चुनें</string>
+    <string name="desc_select_proxy_dialog">तुरंत चुनने के लिए प्रॉक्सी पर टैप करें (%1$d सहेजे गए)</string>
+    <string name="msg_proxy_selected">प्रॉक्सी चुना गया: %1$s</string>
+    <string name="msg_empty_proxy_picker">अभी कोई प्रॉक्सी सहेजा नहीं गया है। कनेक्ट करने के लिए प्रॉक्सी जोड़ें।</string>
+    <string name="cd_select_active_proxy">सक्रिय प्रॉक्सी चुनें या बदलें</string>
 </resources>

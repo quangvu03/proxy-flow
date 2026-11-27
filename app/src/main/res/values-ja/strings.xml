@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">接続</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">プロキシVPNステータス</string>
     <string name="notif_channel_desc">固定プロキシVPNの接続状態を表示します</string>
-    <string name="notif_title_connected">ProxyFlow 稼働中 • %1$s</string>
+    <string name="notif_title_connected">TopProxy 稼働中 • %1$s</string>
     <string name="notif_text_connected">ローカルポート :%1$d • %2$s</string>
     <string name="notif_action_stop">停止</string>
     <string name="msg_no_proxy_to_connect">接続する前にプロキシを1つ以上追加してください</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">プロキシイベントと通知</string>
     <string name="notif_events_channel_desc">接続状態、VPNタイマー終了、ファイアウォール遮断の通知</string>
     <string name="notif_minimal_running">プロキシVPNサービスがバックグラウンドで実行中です</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • 残り %1$s</string>
+    <string name="notif_title_timer_countdown">TopProxy • 残り %1$s</string>
     <string name="notif_title_timer_only">VPNタイマー • 残り %1$s</string>
     <string name="notif_subtext_countdown">カウントダウン %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • %3$s後に自動停止</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN 接続完了</string>
+    <string name="notif_event_connected_title">TopProxy VPN 接続完了</string>
     <string name="notif_event_connected_body">%1$s 経由で通信中</string>
     <string name="notif_event_connected_timer_body">%1$s 経由 • タイマー %2$d分</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN 切断</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN 切断</string>
     <string name="notif_event_disconnected_body">プロキシVPNルーティングを停止しました</string>
-    <string name="notif_event_autostop_title">ProxyFlow 自動停止</string>
+    <string name="notif_event_autostop_title">TopProxy 自動停止</string>
     <string name="notif_event_timer_expired_title">VPNタイマー終了</string>
     <string name="notif_event_timer_expired_body">%1$s経過後にプロキシVPNを自動停止しました</string>
     <string name="notif_event_firewall_title">ファイアウォール警告</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">有効な通知カテゴリがありません</string>
     <string name="setting_notification_types_summary">有効 %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">通知カテゴリの切替</string>
-    <string name="desc_notification_types_dialog">ProxyFlowからの通知の種類ごとにオン・オフを設定します。</string>
+    <string name="desc_notification_types_dialog">TopProxyからの通知の種類ごとにオン・オフを設定します。</string>
     <string name="notif_type_vpn_status">通知バーにVPN状態を表示</string>
     <string name="notif_type_vpn_status_desc">接続中のプロキシアドレス、ローカルポート、切断ボタンを表示</string>
     <string name="notif_type_vpn_status_short">VPN状態</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">通知権限が拒否されました</string>
     <string name="action_test_notification">テスト通知を送信</string>
     <string name="msg_test_notification_sent">テスト通知を送信しました</string>
-    <string name="notif_test_title">ProxyFlow テスト通知</string>
+    <string name="notif_test_title">TopProxy テスト通知</string>
     <string name="notif_test_body">通知とVPNカウントダウンのアラートは正常に動作しています。</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">バージョン: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">切替</string>
+    <string name="title_select_proxy_dialog">プロキシを選択</string>
+    <string name="desc_select_proxy_dialog">タップしてプロキシをすぐ選択 (%1$d件保存済み)</string>
+    <string name="msg_proxy_selected">プロキシを選択しました: %1$s</string>
+    <string name="msg_empty_proxy_picker">保存されたプロキシがありません。接続するにはプロキシを追加してください。</string>
+    <string name="cd_select_active_proxy">使用中のプロキシを選択または変更</string>
 </resources>

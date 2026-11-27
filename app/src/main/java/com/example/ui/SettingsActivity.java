@@ -47,5 +47,10 @@ public class SettingsActivity extends AppCompatActivity {
         if (settingsRoot != null) {
             SettingsUiHelper.refreshSummaries(this, settingsRoot);
         }
+        getWindow().getDecorView().post(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                com.example.data.SettingsPreferences.syncThemeAndLocaleIfNeeded(this);
+            }
+        });
     }
 }

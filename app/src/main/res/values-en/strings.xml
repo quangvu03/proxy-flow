@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">Connect</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">Proxy VPN Status</string>
     <string name="notif_channel_desc">Shows fixed Proxy VPN connection status</string>
-    <string name="notif_title_connected">ProxyFlow Active • %1$s</string>
+    <string name="notif_title_connected">TopProxy Active • %1$s</string>
     <string name="notif_text_connected">Local port :%1$d • %2$s</string>
     <string name="notif_action_stop">Stop</string>
     <string name="msg_no_proxy_to_connect">Please add at least 1 Proxy before connecting</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">Proxy Events &amp; Alerts</string>
     <string name="notif_events_channel_desc">Alerts for connection state, VPN timer expiration, and firewall blocks</string>
     <string name="notif_minimal_running">Proxy VPN service running in background</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • %1$s left</string>
+    <string name="notif_title_timer_countdown">TopProxy • %1$s left</string>
     <string name="notif_title_timer_only">VPN Timer • %1$s left</string>
     <string name="notif_subtext_countdown">Countdown %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Auto-stop in %3$s</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN Connected</string>
+    <string name="notif_event_connected_title">TopProxy VPN Connected</string>
     <string name="notif_event_connected_body">Routing traffic via %1$s</string>
     <string name="notif_event_connected_timer_body">Routing via %1$s • Timer %2$d min</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN Disconnected</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN Disconnected</string>
     <string name="notif_event_disconnected_body">Proxy VPN routing session stopped</string>
-    <string name="notif_event_autostop_title">ProxyFlow Auto-Stopped</string>
+    <string name="notif_event_autostop_title">TopProxy Auto-Stopped</string>
     <string name="notif_event_timer_expired_title">VPN Timer Expired</string>
     <string name="notif_event_timer_expired_body">Proxy VPN service stopped automatically after %1$s</string>
     <string name="notif_event_firewall_title">Firewall Alert</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">No notification categories enabled</string>
     <string name="setting_notification_types_summary">Enabled %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">Toggle Notification Categories</string>
-    <string name="desc_notification_types_dialog">Turn each type of ProxyFlow notification on or off individually.</string>
+    <string name="desc_notification_types_dialog">Turn each type of TopProxy notification on or off individually.</string>
     <string name="notif_type_vpn_status">VPN status in notification bar</string>
     <string name="notif_type_vpn_status_desc">Show active Proxy address, local port, and quick disconnect button</string>
     <string name="notif_type_vpn_status_short">VPN status</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">Notification permission denied</string>
     <string name="action_test_notification">Send test notification</string>
     <string name="msg_test_notification_sent">Test notification sent</string>
-    <string name="notif_test_title">ProxyFlow Test Notification</string>
+    <string name="notif_test_title">TopProxy Test Notification</string>
     <string name="notif_test_body">Notifications and VPN countdown alerts are working properly.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Version: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">Switch</string>
+    <string name="title_select_proxy_dialog">Select Proxy</string>
+    <string name="desc_select_proxy_dialog">Tap a proxy to select it right away (%1$d saved)</string>
+    <string name="msg_proxy_selected">Selected proxy: %1$s</string>
+    <string name="msg_empty_proxy_picker">No proxies saved yet. Add a proxy to start connecting.</string>
+    <string name="cd_select_active_proxy">Select or switch active proxy</string>
 </resources>

@@ -36,71 +36,44 @@
                 android:textSize="13sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Filter Chips + Buy Proxy Button -->
-        <LinearLayout
+        <!-- Filter Chips -->
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:scrollbars="none">
 
-            <HorizontalScrollView
-                android:layout_width="0dp"
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chip_group_filter"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:scrollbars="none">
+                app:selectionRequired="true"
+                app:singleLine="true"
+                app:singleSelection="true">
 
-                <com.google.android.material.chip.ChipGroup
-                    android:id="@+id/chip_group_filter"
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_filter_all"
+                    style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:selectionRequired="true"
-                    app:singleLine="true"
-                    app:singleSelection="true">
+                    android:checked="true"
+                    android:text="@string/filter_all" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_filter_all"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="true"
-                        android:text="@string/filter_all" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_filter_online"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/filter_online" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_filter_online"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/filter_online" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_filter_error"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/filter_error" />
-                </com.google.android.material.chip.ChipGroup>
-            </HorizontalScrollView>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_buy_proxy"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginStart="6dp"
-                android:ellipsize="end"
-                android:insetTop="4dp"
-                android:insetBottom="4dp"
-                android:maxLines="1"
-                android:minWidth="0dp"
-                android:paddingHorizontal="12dp"
-                android:text="@string/action_buy_proxy"
-                android:textSize="12sp"
-                app:cornerRadius="20dp"
-                app:icon="@drawable/ic_shop"
-                app:iconPadding="4dp"
-                app:iconSize="16dp" />
-        </LinearLayout>
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_filter_error"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/filter_error" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
 
         <!-- Batch Action Bar: Test All, Import List, Export .txt -->
         <LinearLayout
@@ -248,14 +221,42 @@
         </LinearLayout>
     </LinearLayout>
 
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/fab_add_proxy"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/layout_bottom_proxy_actions"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:contentDescription="@string/action_add_proxy"
-        android:text="@string/action_add_proxy"
-        app:icon="@drawable/ic_add" />
+        android:layout_gravity="bottom"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/btn_buy_proxy"
+            style="@style/Widget.Material3.ExtendedFloatingActionButton.Secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="@string/action_buy_proxy"
+            android:text="@string/action_buy_proxy"
+            android:textColor="@color/md_theme_onSecondaryContainer"
+            app:backgroundTint="@color/md_theme_secondaryContainer"
+            app:icon="@drawable/ic_shop"
+            app:iconTint="@color/md_theme_onSecondaryContainer" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/fab_add_proxy"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/action_add_proxy"
+            android:text="@string/action_add_proxy"
+            app:icon="@drawable/ic_add" />
+    </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

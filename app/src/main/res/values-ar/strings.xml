@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">اتصال</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">حالة بروكسي VPN</string>
     <string name="notif_channel_desc">يعرض حالة اتصال VPN للبروكسي الثابت</string>
-    <string name="notif_title_connected">ProxyFlow يعمل • %1$s</string>
+    <string name="notif_title_connected">TopProxy يعمل • %1$s</string>
     <string name="notif_text_connected">المنفذ المحلي :%1$d • %2$s</string>
     <string name="notif_action_stop">إيقاف</string>
     <string name="msg_no_proxy_to_connect">يرجى إضافة بروكسي واحد على الأقل قبل الاتصال</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">أحداث وتنبيهات البروكسي</string>
     <string name="notif_events_channel_desc">تنبيهات حالة الاتصال، انتهاء مؤقت VPN وحظر جدار الحماية</string>
     <string name="notif_minimal_running">خدمة VPN للبروكسي تعمل في الخلفية</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • متبقٍ %1$s</string>
+    <string name="notif_title_timer_countdown">TopProxy • متبقٍ %1$s</string>
     <string name="notif_title_timer_only">مؤقت VPN • متبقٍ %1$s</string>
     <string name="notif_subtext_countdown">العد التنازلي %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • إيقاف تلقائي خلال %3$s</string>
-    <string name="notif_event_connected_title">تم اتصال ProxyFlow VPN</string>
+    <string name="notif_event_connected_title">تم اتصال TopProxy VPN</string>
     <string name="notif_event_connected_body">يتم توجيه حركة المرور عبر %1$s</string>
     <string name="notif_event_connected_timer_body">التوجيه عبر %1$s • مؤقت %2$d دقيقة</string>
-    <string name="notif_event_disconnected_title">تم قطع اتصال ProxyFlow VPN</string>
+    <string name="notif_event_disconnected_title">تم قطع اتصال TopProxy VPN</string>
     <string name="notif_event_disconnected_body">توقفت جلسة توجيه VPN للبروكسي</string>
-    <string name="notif_event_autostop_title">توقف ProxyFlow تلقائياً</string>
+    <string name="notif_event_autostop_title">توقف TopProxy تلقائياً</string>
     <string name="notif_event_timer_expired_title">انتهى مؤقت VPN</string>
     <string name="notif_event_timer_expired_body">توقفت خدمة VPN للبروكسي تلقائياً بعد %1$s</string>
     <string name="notif_event_firewall_title">تنبيه جدار الحماية</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">لم يتم تفعيل أي فئة إشعارات</string>
     <string name="setting_notification_types_summary">مفعّل %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">تبديل فئات الإشعارات</string>
-    <string name="desc_notification_types_dialog">تفعيل أو تعطيل كل نوع من إشعارات ProxyFlow بشكل فردي.</string>
+    <string name="desc_notification_types_dialog">تفعيل أو تعطيل كل نوع من إشعارات TopProxy بشكل فردي.</string>
     <string name="notif_type_vpn_status">حالة VPN في شريط الإشعارات</string>
     <string name="notif_type_vpn_status_desc">عرض عنوان البروكسي النشط والمنفذ المحلي وزر القطع السريع</string>
     <string name="notif_type_vpn_status_short">حالة VPN</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">تم رفض إذن الإشعارات</string>
     <string name="action_test_notification">إرسال إشعار تجريبي</string>
     <string name="msg_test_notification_sent">تم إرسال الإشعار التجريبي</string>
-    <string name="notif_test_title">إشعار تجريبي من ProxyFlow</string>
+    <string name="notif_test_title">إشعار تجريبي من TopProxy</string>
     <string name="notif_test_body">تعمل الإشعارات وتنبيهات مؤقت VPN بشكل سليم.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">الإصدار: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">تبديل</string>
+    <string name="title_select_proxy_dialog">اختر بروكسي</string>
+    <string name="desc_select_proxy_dialog">اضغط على بروكسي لاختياره فوراً (%1$d محفوظ)</string>
+    <string name="msg_proxy_selected">تم اختيار البروكسي: %1$s</string>
+    <string name="msg_empty_proxy_picker">لا توجد بروكسيات محفوظة بعد. أضف بروكسي لبدء الاتصال.</string>
+    <string name="cd_select_active_proxy">اختيار أو تبديل البروكسي النشط</string>
 </resources>

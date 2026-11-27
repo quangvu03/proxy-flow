@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">연결</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">프록시 VPN 상태</string>
     <string name="notif_channel_desc">고정 프록시 VPN 연결 상태를 표시합니다</string>
-    <string name="notif_title_connected">ProxyFlow 실행 중 • %1$s</string>
+    <string name="notif_title_connected">TopProxy 실행 중 • %1$s</string>
     <string name="notif_text_connected">로컬 포트 :%1$d • %2$s</string>
     <string name="notif_action_stop">중지</string>
     <string name="msg_no_proxy_to_connect">연결하기 전에 프록시를 1개 이상 추가하세요</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">프록시 이벤트 및 알림</string>
     <string name="notif_events_channel_desc">연결 상태, VPN 타이머 만료 및 방화벽 차단 알림</string>
     <string name="notif_minimal_running">프록시 VPN 서비스가 백그라운드에서 실행 중입니다</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • %1$s 남음</string>
+    <string name="notif_title_timer_countdown">TopProxy • %1$s 남음</string>
     <string name="notif_title_timer_only">VPN 타이머 • %1$s 남음</string>
     <string name="notif_subtext_countdown">카운트다운 %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • %3$s 후 자동 중지</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN 연결됨</string>
+    <string name="notif_event_connected_title">TopProxy VPN 연결됨</string>
     <string name="notif_event_connected_body">%1$s을(를) 통해 트래픽 라우팅 중</string>
     <string name="notif_event_connected_timer_body">%1$s 경유 라우팅 • 타이머 %2$d분</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN 연결 해제됨</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN 연결 해제됨</string>
     <string name="notif_event_disconnected_body">프록시 VPN 라우팅 세션이 중지되었습니다</string>
-    <string name="notif_event_autostop_title">ProxyFlow 자동 중지됨</string>
+    <string name="notif_event_autostop_title">TopProxy 자동 중지됨</string>
     <string name="notif_event_timer_expired_title">VPN 타이머 만료됨</string>
     <string name="notif_event_timer_expired_body">%1$s 후 프록시 VPN 서비스가 자동 중지되었습니다</string>
     <string name="notif_event_firewall_title">방화벽 경고</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">활성화된 알림 카테고리가 없습니다</string>
     <string name="setting_notification_types_summary">활성화됨 %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">알림 카테고리 설정</string>
-    <string name="desc_notification_types_dialog">각 유형의 ProxyFlow 알림을 개별적으로 켜거나 끕니다.</string>
+    <string name="desc_notification_types_dialog">각 유형의 TopProxy 알림을 개별적으로 켜거나 끕니다.</string>
     <string name="notif_type_vpn_status">알림 표시줄 VPN 상태</string>
     <string name="notif_type_vpn_status_desc">활성 프록시 주소, 로컬 포트 및 빠른 연결 해제 버튼 표시</string>
     <string name="notif_type_vpn_status_short">VPN 상태</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">알림 권한이 거부되었습니다</string>
     <string name="action_test_notification">테스트 알림 보내기</string>
     <string name="msg_test_notification_sent">테스트 알림을 보냈습니다</string>
-    <string name="notif_test_title">ProxyFlow 테스트 알림</string>
+    <string name="notif_test_title">TopProxy 테스트 알림</string>
     <string name="notif_test_body">알림 및 VPN 카운트다운 경고가 정상 작동하고 있습니다.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">버전: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">변경</string>
+    <string name="title_select_proxy_dialog">프록시 선택</string>
+    <string name="desc_select_proxy_dialog">프록시를 탭하여 바로 선택하세요 (%1$d개 저장됨)</string>
+    <string name="msg_proxy_selected">선택된 프록시: %1$s</string>
+    <string name="msg_empty_proxy_picker">저장된 프록시가 없습니다. 연결하려면 프록시를 추가하세요.</string>
+    <string name="cd_select_active_proxy">활성 프록시 선택 또는 변경</string>
 </resources>

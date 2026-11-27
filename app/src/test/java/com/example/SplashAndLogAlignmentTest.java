@@ -49,7 +49,7 @@ public class SplashAndLogAlignmentTest {
             assertNotNull(progress);
 
             assertEquals(View.VISIBLE, overlay.getVisibility());
-            assertEquals("ProxyFlow", title.getText().toString());
+            assertEquals("TopProxy", title.getText().toString());
             assertTrue(tagline.getText().length() > 10);
         }
     }

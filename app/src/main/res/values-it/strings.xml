@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">Connetti</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">Stato VPN Proxy</string>
     <string name="notif_channel_desc">Mostra lo stato della connessione VPN Proxy fissa</string>
-    <string name="notif_title_connected">ProxyFlow attivo • %1$s</string>
+    <string name="notif_title_connected">TopProxy attivo • %1$s</string>
     <string name="notif_text_connected">Porta locale :%1$d • %2$s</string>
     <string name="notif_action_stop">Interrompi</string>
     <string name="msg_no_proxy_to_connect">Aggiungi almeno 1 Proxy prima di connetterti</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">Eventi e avvisi Proxy</string>
     <string name="notif_events_channel_desc">Avvisi su stato connessione, scadenza timer VPN e blocchi firewall</string>
     <string name="notif_minimal_running">Servizio VPN Proxy in esecuzione in background</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • %1$s rimanenti</string>
+    <string name="notif_title_timer_countdown">TopProxy • %1$s rimanenti</string>
     <string name="notif_title_timer_only">Timer VPN • %1$s rimanenti</string>
     <string name="notif_subtext_countdown">Conto alla rovescia %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Arresto tra %3$s</string>
-    <string name="notif_event_connected_title">ProxyFlow VPN connessa</string>
+    <string name="notif_event_connected_title">TopProxy VPN connessa</string>
     <string name="notif_event_connected_body">Instradamento traffico via %1$s</string>
     <string name="notif_event_connected_timer_body">Instradamento via %1$s • Timer %2$d min</string>
-    <string name="notif_event_disconnected_title">ProxyFlow VPN disconnessa</string>
+    <string name="notif_event_disconnected_title">TopProxy VPN disconnessa</string>
     <string name="notif_event_disconnected_body">Sessione di instradamento VPN Proxy arrestata</string>
-    <string name="notif_event_autostop_title">ProxyFlow arrestato automaticamente</string>
+    <string name="notif_event_autostop_title">TopProxy arrestato automaticamente</string>
     <string name="notif_event_timer_expired_title">Timer VPN scaduto</string>
     <string name="notif_event_timer_expired_body">Servizio VPN Proxy arrestato automaticamente dopo %1$s</string>
     <string name="notif_event_firewall_title">Avviso Firewall</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">Nessuna categoria attivata</string>
     <string name="setting_notification_types_summary">Attive %1$d/%2$d: %3$s</string>
     <string name="title_notification_types_dialog">Attiva/disattiva categorie notifiche</string>
-    <string name="desc_notification_types_dialog">Attiva o disattiva singolarmente ogni tipo di notifica di ProxyFlow.</string>
+    <string name="desc_notification_types_dialog">Attiva o disattiva singolarmente ogni tipo di notifica di TopProxy.</string>
     <string name="notif_type_vpn_status">Stato VPN nella barra notifiche</string>
     <string name="notif_type_vpn_status_desc">Mostra indirizzo Proxy attivo, porta locale e disconnessione rapida</string>
     <string name="notif_type_vpn_status_short">Stato VPN</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">Permesso notifiche negato</string>
     <string name="action_test_notification">Invia notifica di test</string>
     <string name="msg_test_notification_sent">Notifica di test inviata</string>
-    <string name="notif_test_title">Notifica di test ProxyFlow</string>
+    <string name="notif_test_title">Notifica di test TopProxy</string>
     <string name="notif_test_body">Le notifiche e gli avvisi del timer VPN funzionano correttamente.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Versione: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">Cambia</string>
+    <string name="title_select_proxy_dialog">Seleziona Proxy</string>
+    <string name="desc_select_proxy_dialog">Tocca un proxy per selezionarlo (%1$d salvati)</string>
+    <string name="msg_proxy_selected">Proxy selezionato: %1$s</string>
+    <string name="msg_empty_proxy_picker">Nessun proxy salvato. Aggiungi un proxy per connetterti.</string>
+    <string name="cd_select_active_proxy">Seleziona o cambia proxy attivo</string>
 </resources>

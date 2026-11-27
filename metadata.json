@@ -1,5 +1,5 @@
 {
-  "name": "ProxyFlow",
+  "name": "TopProxy",
   "description": "100% Java Android HTTP proxy manager with saved proxy lists, IP/geolocation map inspection, speed testing, and manual fixed-IP connection.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

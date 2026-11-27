@@ -85,6 +85,12 @@
             android:theme="@style/Theme.ProxyFlow" />
 
         <activity
+            android:name=".ui.AppearancePickerActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ProxyFlow" />
+
+        <activity
             android:name=".ui.NotificationsSettingsActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"

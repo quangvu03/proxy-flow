@@ -8,4 +8,5 @@
     <dimen name="ip_map_height">230dp</dimen>
     <dimen name="detail_map_height">180dp</dimen>
     <dimen name="bulk_import_min_height">260dp</dimen>
+    <integer name="language_grid_columns">2</integer>
 </resources>

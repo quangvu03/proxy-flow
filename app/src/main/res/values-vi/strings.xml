@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ProxyFlow</string>
+    <string name="app_name">TopProxy</string>
 
     <!-- Navigation -->
     <string name="nav_connect">Kết nối</string>
@@ -152,7 +152,7 @@
     <!-- Notifications & Messages -->
     <string name="notif_channel_name">Trạng thái Proxy VPN</string>
     <string name="notif_channel_desc">Hiển thị trạng thái kết nối Proxy VPN cố định</string>
-    <string name="notif_title_connected">ProxyFlow đang chạy • %1$s</string>
+    <string name="notif_title_connected">TopProxy đang chạy • %1$s</string>
     <string name="notif_text_connected">Cổng cục bộ :%1$d • %2$s</string>
     <string name="notif_action_stop">Ngắt</string>
     <string name="msg_no_proxy_to_connect">Hãy thêm ít nhất 1 Proxy trước khi kết nối</string>
@@ -380,16 +380,16 @@
     <string name="notif_events_channel_name">Sự kiện &amp; Cảnh báo Proxy</string>
     <string name="notif_events_channel_desc">Thông báo kết nối, ngắt kết nối, hết hẹn giờ VPN và tường lửa</string>
     <string name="notif_minimal_running">Dịch vụ VPN Proxy đang hoạt động nền</string>
-    <string name="notif_title_timer_countdown">ProxyFlow • Còn %1$s</string>
+    <string name="notif_title_timer_countdown">TopProxy • Còn %1$s</string>
     <string name="notif_title_timer_only">Hẹn giờ VPN • Còn %1$s</string>
     <string name="notif_subtext_countdown">Đếm ngược %1$s</string>
     <string name="notif_text_timer_remaining_detail">%1$s (:%2$d) • Tự ngắt sau %3$s</string>
-    <string name="notif_event_connected_title">Đã kết nối ProxyFlow VPN</string>
+    <string name="notif_event_connected_title">Đã kết nối TopProxy VPN</string>
     <string name="notif_event_connected_body">Đang định tuyến lưu lượng qua %1$s</string>
     <string name="notif_event_connected_timer_body">Đang định tuyến qua %1$s • Hẹn giờ %2$d phút</string>
-    <string name="notif_event_disconnected_title">Đã ngắt kết nối ProxyFlow VPN</string>
+    <string name="notif_event_disconnected_title">Đã ngắt kết nối TopProxy VPN</string>
     <string name="notif_event_disconnected_body">Phiên định tuyến Proxy VPN đã dừng</string>
-    <string name="notif_event_autostop_title">ProxyFlow đã tự động dừng</string>
+    <string name="notif_event_autostop_title">TopProxy đã tự động dừng</string>
     <string name="notif_event_timer_expired_title">Hết thời gian hẹn giờ VPN</string>
     <string name="notif_event_timer_expired_body">Dịch vụ Proxy VPN đã tự ngắt sau %1$s</string>
     <string name="notif_event_firewall_title">Cảnh báo Tường lửa</string>
@@ -402,7 +402,7 @@
     <string name="setting_notification_types_none">Chưa bật loại thông báo nào</string>
     <string name="setting_notification_types_summary">Đang bật %1$d/%2$d loại: %3$s</string>
     <string name="title_notification_types_dialog">Bật / tắt các loại thông báo</string>
-    <string name="desc_notification_types_dialog">Bật hoặc tắt từng loại thông báo bạn muốn nhận từ ProxyFlow.</string>
+    <string name="desc_notification_types_dialog">Bật hoặc tắt từng loại thông báo bạn muốn nhận từ TopProxy.</string>
     <string name="notif_type_vpn_status">Trạng thái VPN trên thanh thông báo</string>
     <string name="notif_type_vpn_status_desc">Hiển thị địa chỉ Proxy, cổng cục bộ và nút ngắt nhanh</string>
     <string name="notif_type_vpn_status_short">Trạng thái VPN</string>
@@ -423,7 +423,7 @@
     <string name="msg_notif_permission_denied">Chưa cấp quyền hiển thị thông báo</string>
     <string name="action_test_notification">Gửi thông báo thử</string>
     <string name="msg_test_notification_sent">Đã gửi thông báo thử nghiệm</string>
-    <string name="notif_test_title">Thông báo thử từ ProxyFlow</string>
+    <string name="notif_test_title">Thông báo thử từ TopProxy</string>
     <string name="notif_test_body">Hệ thống thông báo và đếm ngược VPN đang hoạt động bình thường.</string>
 
     <!-- Google-Only Login -->
@@ -514,4 +514,12 @@
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
     <string name="label_app_version">Phiên bản: %1$s • 100%% Java</string>
+
+    <!-- Connect Quick Proxy Selector -->
+    <string name="action_change_proxy_short">Chọn</string>
+    <string name="title_select_proxy_dialog">Chọn Proxy kết nối</string>
+    <string name="desc_select_proxy_dialog">Nhấn vào một Proxy để chọn ngay (%1$d đã lưu)</string>
+    <string name="msg_proxy_selected">Đã chọn Proxy: %1$s</string>
+    <string name="msg_empty_proxy_picker">Chưa có Proxy nào trong danh sách. Hãy thêm Proxy mới để kết nối.</string>
+    <string name="cd_select_active_proxy">Chọn hoặc đổi Proxy đang dùng</string>
 </resources>
