@@ -9,7 +9,6 @@ import com.example.network.LocalProxyServer;
 import com.example.network.ProxySpeedTester;
 import com.example.network.ProxyTester;
 import com.example.network.UpstreamProxyConnector;
-import com.example.ui.AddEditProxyActivity;
 
 import org.junit.Test;
 
@@ -220,6 +219,7 @@ public class NoAuthAndUpstreamTest {
 
             ProxyTester.TestResult noAuthTest = ProxyTester.testProxy(noAuthProxy, 3000);
             assertFalse(noAuthTest.isSuccess());
+            assertEquals(ProxyTester.FailureReason.AUTH_REQUIRED, noAuthTest.getFailureReason());
             assertTrue(noAuthTest.getErrorMessage().contains("yêu cầu xác thực"));
             assertFalse(noAuthTest.getErrorMessage().contains("Sai tài khoản"));
 
@@ -228,7 +228,7 @@ public class NoAuthAndUpstreamTest {
             assertEquals(ProxySpeedTester.AuthState.REQUIRED, diag.getAuthState());
             assertFalse(diag.getErrorMessage().contains("Sai tài khoản"));
 
-            // 2. Credentials entered AND wrong -> reports 407 wrong credentials & FAILED_407
+            // 2. Credentials entered AND wrong -> reports 407 wrong credentials & AUTH_FAILED
             ProxyConfig wrongCredProxy = new ProxyConfig();
             wrongCredProxy.setProtocol(ProxyConfig.Protocol.HTTP);
             wrongCredProxy.setHost("127.0.0.1");
@@ -239,6 +239,7 @@ public class NoAuthAndUpstreamTest {
 
             ProxyTester.TestResult badAuthTest = ProxyTester.testProxy(wrongCredProxy, 3000);
             assertFalse(badAuthTest.isSuccess());
+            assertEquals(ProxyTester.FailureReason.AUTH_FAILED, badAuthTest.getFailureReason());
             assertTrue(badAuthTest.getErrorMessage().contains("407"));
         }
     }
@@ -274,6 +275,7 @@ public class NoAuthAndUpstreamTest {
 
             ProxyTester.TestResult result = ProxyTester.testProxy(socksNoAuth, 3000);
             assertFalse(result.isSuccess());
+            assertEquals(ProxyTester.FailureReason.AUTH_REQUIRED, result.getFailureReason());
             assertTrue(result.getErrorMessage().contains("yêu cầu xác thực"));
             assertFalse(result.getErrorMessage().contains("Sai tài khoản"));
 
@@ -284,16 +286,37 @@ public class NoAuthAndUpstreamTest {
     }
 
     @Test
-    public void addEditProxyActivity_isPortTimeoutError_matchesPortTimeoutsOnly() {
-        assertTrue(AddEditProxyActivity.isPortTimeoutError("Timeout connecting to the specified port (8080)"));
-        assertTrue(AddEditProxyActivity.isPortTimeoutError("timeout connecting to the specified port"));
-        assertTrue(AddEditProxyActivity.isPortTimeoutError("connect timed out"));
-        assertTrue(AddEditProxyActivity.isPortTimeoutError("failed to connect to /1.2.3.4 (port 1080)"));
-        assertTrue(AddEditProxyActivity.isPortTimeoutError("Quá thời gian kết nối"));
+    public void proxyTester_classifiesTimeoutRefusedHostAndAuthErrorsAccurately() throws Exception {
+        assertEquals(ProxyTester.FailureReason.TIMEOUT,
+                ProxyTester.inferFailureReasonFromMessage("Quá thời gian kết nối tới 1.2.3.4:8080"));
+        assertEquals(ProxyTester.FailureReason.TIMEOUT,
+                ProxyTester.inferFailureReasonFromMessage("connect timed out"));
+        assertEquals(ProxyTester.FailureReason.CONNECTION_REFUSED,
+                ProxyTester.inferFailureReasonFromMessage("Connection refused"));
+        assertEquals(ProxyTester.FailureReason.AUTH_REQUIRED,
+                ProxyTester.inferFailureReasonFromMessage("Proxy yêu cầu xác thực"));
+        assertEquals(ProxyTester.FailureReason.AUTH_FAILED,
+                ProxyTester.inferFailureReasonFromMessage("Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy"));
+        assertEquals(ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH,
+                ProxyTester.inferFailureReasonFromMessage(
+                        "Lỗi 407: Proxy yêu cầu xác thực HTTP Digest (hãy đổi sang Tự động hoặc HTTP Digest)"));
+        assertEquals(ProxyTester.FailureReason.TLS_FAILED,
+                ProxyTester.inferFailureReasonFromMessage("SSL handshake failed"));
+        assertEquals(ProxyTester.FailureReason.HOST_UNREACHABLE,
+                ProxyTester.inferFailureReasonFromMessage("Unable to resolve host"));
 
-        assertFalse(AddEditProxyActivity.isPortTimeoutError("Lỗi 407: Sai tài khoản hoặc mật khẩu"));
-        assertFalse(AddEditProxyActivity.isPortTimeoutError("Connection refused"));
-        assertFalse(AddEditProxyActivity.isPortTimeoutError(""));
-        assertFalse(AddEditProxyActivity.isPortTimeoutError(null));
+        // Real closed local port -> CONNECTION_REFUSED even in Protocol.ALL mode
+        int closedPort;
+        try (ServerSocket s = new ServerSocket(0)) {
+            closedPort = s.getLocalPort();
+        }
+        ProxyConfig closedProxy = new ProxyConfig();
+        closedProxy.setProtocol(ProxyConfig.Protocol.ALL);
+        closedProxy.setHost("127.0.0.1");
+        closedProxy.setPort(closedPort);
+        ProxyTester.TestResult closedResult = ProxyTester.testProxy(closedProxy, 1500);
+        assertFalse(closedResult.isSuccess());
+        assertEquals(ProxyTester.FailureReason.CONNECTION_REFUSED, closedResult.getFailureReason());
+        assertFalse(closedResult.getErrorMessage().contains("specified port"));
     }
 }

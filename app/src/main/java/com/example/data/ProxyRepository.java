@@ -14,9 +14,13 @@ import com.example.model.ProxyLogEntry;
 import com.example.network.ProxyTester;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,6 +49,9 @@ public class ProxyRepository {
     private final MutableLiveData<List<InstalledAppInfo>> installedAppsLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<Boolean> scanningAppsLiveData = new MutableLiveData<>(false);
     private final MutableLiveData<List<FirewallRule>> firewallRulesLiveData = new MutableLiveData<>(new ArrayList<>());
+    private final ConcurrentHashMap<Long, FailureRecord> failureMap = new ConcurrentHashMap<>();
+    private final MutableLiveData<Map<Long, FailureRecord>> proxyFailuresLiveData =
+            new MutableLiveData<>(Collections.emptyMap());
     private final AtomicInteger batchEventSeq = new AtomicInteger(0);
 
     private ProxyRepository(Context appContext) {
@@ -58,15 +65,16 @@ public class ProxyRepository {
     }
 
     public static ProxyRepository getInstance(Context context) {
-        Context appCtx = context.getApplicationContext();
-        if (appCtx == null) {
-            appCtx = context;
-        }
+        Context appCtx = resolveCanonicalAppContext(context);
         ProxyRepository current = instance;
         if (current == null || current.appContext != appCtx) {
             synchronized (ProxyRepository.class) {
                 current = instance;
                 if (current == null || current.appContext != appCtx) {
+                    System.err.println("[ProxyRepoDbg] replacing instance! cur=" + (current == null ? "null" : System.identityHashCode(current.appContext))
+                            + " new=" + System.identityHashCode(appCtx) + " rawCtx=" + context.getClass().getName()
+                            + " thread=" + Thread.currentThread().getName());
+                    new Exception("ProxyRepoDbg").printStackTrace(System.err);
                     if (current != null) {
                         current.shutdownInternal();
                     }
@@ -75,6 +83,40 @@ public class ProxyRepository {
             }
         }
         return instance;
+    }
+
+    private static Context resolveCanonicalAppContext(Context context) {
+        if (context instanceof android.app.Application) {
+            return context;
+        }
+        if (context instanceof android.app.Activity) {
+            android.app.Application app = ((android.app.Activity) context).getApplication();
+            if (app != null) {
+                return app;
+            }
+        }
+        if (context instanceof android.app.Service) {
+            android.app.Application app = ((android.app.Service) context).getApplication();
+            if (app != null) {
+                return app;
+            }
+        }
+        Context appCtx = context.getApplicationContext();
+        Context cursor = appCtx != null ? appCtx : context;
+        int depth = 0;
+        while (cursor instanceof android.content.ContextWrapper
+                && !(cursor instanceof android.app.Application)
+                && depth++ < 16) {
+            Context base = ((android.content.ContextWrapper) cursor).getBaseContext();
+            if (base == null || base == cursor) {
+                break;
+            }
+            cursor = base;
+        }
+        if (cursor instanceof android.app.Application) {
+            return cursor;
+        }
+        return appCtx != null ? appCtx : context;
     }
 
     private void shutdownInternal() {
@@ -104,6 +146,10 @@ public class ProxyRepository {
 
     public LiveData<BatchTestSummary> getBatchTestSummary() {
         return batchTestSummaryLiveData;
+    }
+
+    public LiveData<Map<Long, FailureRecord>> getProxyFailures() {
+        return proxyFailuresLiveData;
     }
 
     public LiveData<AppProxyRule> getAppProxyRule() {
@@ -305,6 +351,7 @@ public class ProxyRepository {
         ioExecutor.execute(() -> {
             if (proxy.getId() > 0) {
                 dbHelper.updateProxy(proxy);
+                clearProxyFailure(proxy.getId());
                 dbHelper.insertLog(ProxyLogEntry.Level.INFO,
                         ProxyLogFormatter.getString(appContext, R.string.log_proxy_updated, proxy.getAddressDisplay()));
             } else {
@@ -354,6 +401,7 @@ public class ProxyRepository {
         ioExecutor.execute(() -> {
             ProxyConfig existing = dbHelper.getProxyById(proxyId);
             dbHelper.deleteProxy(proxyId);
+            clearProxyFailure(proxyId);
             if (prefs.getActiveProxyId() == proxyId) {
                 prefs.setActiveProxyId(-1L);
             }
@@ -396,6 +444,7 @@ public class ProxyRepository {
             ProxyTester.TestResult result = ProxyTester.testProxy(proxy, 8000);
             long now = System.currentTimeMillis();
             if (result.isSuccess()) {
+                clearProxyFailure(proxy.getId());
                 if (proxy.getProtocol().isAutoDetect() && result.getDetectedProtocol() != null) {
                     proxy.setProtocol(result.getDetectedProtocol());
                     dbHelper.updateProxyProtocol(proxy.getId(), result.getDetectedProtocol());
@@ -415,6 +464,8 @@ public class ProxyRepository {
                         ProxyLogFormatter.getString(appContext, R.string.log_proxy_test_ok,
                                 proxy.getAddressDisplay(), result.getLatencyMs(), result.getExitIp()));
             } else {
+                recordProxyFailure(proxy.getId(), result.getFailureReason(),
+                        result.getHttpStatusCode(), result.getErrorMessage());
                 dbHelper.updateProxyTelemetry(
                         proxy.getId(),
                         ProxyConfig.LATENCY_FAILED,
@@ -423,9 +474,18 @@ public class ProxyRepository {
                         now,
                         proxy.getFailCount() + 1
                 );
+                String localizedReason = com.example.network.ProxyFailureFormatter.format(
+                        SettingsPreferences.getLocalizedContext(appContext),
+                        result.getFailureReason(),
+                        result.getHttpStatusCode(),
+                        proxy.getHost(),
+                        proxy.getPort(),
+                        proxy.getAuthMethod(),
+                        result.getErrorMessage()
+                );
                 dbHelper.insertLog(ProxyLogEntry.Level.ERROR,
                         ProxyLogFormatter.getString(appContext, R.string.log_proxy_test_failed,
-                                proxy.getAddressDisplay(), result.getErrorMessage()));
+                                proxy.getAddressDisplay(), localizedReason));
             }
             refreshInternal();
             if (callback != null) {
@@ -454,6 +514,7 @@ public class ProxyRepository {
                         long now = System.currentTimeMillis();
                         if (res.isSuccess()) {
                             okCount.incrementAndGet();
+                            clearProxyFailure(p.getId());
                             if (p.getProtocol().isAutoDetect() && res.getDetectedProtocol() != null) {
                                 p.setProtocol(res.getDetectedProtocol());
                                 dbHelper.updateProxyProtocol(p.getId(), res.getDetectedProtocol());
@@ -461,6 +522,8 @@ public class ProxyRepository {
                             dbHelper.updateProxyTelemetry(
                                     p.getId(), res.getLatencyMs(), res.getExitIp(), res.getCountry(), now, 0);
                         } else {
+                            recordProxyFailure(p.getId(), res.getFailureReason(),
+                                    res.getHttpStatusCode(), res.getErrorMessage());
                             dbHelper.updateProxyTelemetry(
                                     p.getId(), ProxyConfig.LATENCY_FAILED, p.getExitIp(), p.getCountry(), now, p.getFailCount() + 1);
                         }
@@ -559,12 +622,51 @@ public class ProxyRepository {
         return null;
     }
 
+    public void recordProxyFailure(long proxyId, ProxyTester.FailureReason reason,
+                                   int httpStatusCode, String rawMessage) {
+        if (proxyId <= 0) return;
+        failureMap.put(proxyId, new FailureRecord(
+                reason != null ? reason : ProxyTester.FailureReason.PROTOCOL_OR_RESPONSE_ERROR,
+                httpStatusCode,
+                rawMessage != null ? rawMessage : "",
+                System.currentTimeMillis()
+        ));
+        proxyFailuresLiveData.postValue(Collections.unmodifiableMap(new HashMap<>(failureMap)));
+    }
+
+    public void clearProxyFailure(long proxyId) {
+        if (proxyId <= 0) return;
+        if (failureMap.remove(proxyId) != null) {
+            proxyFailuresLiveData.postValue(Collections.unmodifiableMap(new HashMap<>(failureMap)));
+        }
+    }
+
     public interface ImportCallback {
         void onImported(int count);
     }
 
     public interface TestCallback {
         void onTested(ProxyTester.TestResult result);
+    }
+
+    public static final class FailureRecord {
+        private final ProxyTester.FailureReason reason;
+        private final int httpStatusCode;
+        private final String rawMessage;
+        private final long timestampMs;
+
+        public FailureRecord(ProxyTester.FailureReason reason, int httpStatusCode,
+                             String rawMessage, long timestampMs) {
+            this.reason = reason != null ? reason : ProxyTester.FailureReason.PROTOCOL_OR_RESPONSE_ERROR;
+            this.httpStatusCode = httpStatusCode;
+            this.rawMessage = rawMessage != null ? rawMessage : "";
+            this.timestampMs = timestampMs;
+        }
+
+        public ProxyTester.FailureReason getReason() { return reason; }
+        public int getHttpStatusCode() { return httpStatusCode; }
+        public String getRawMessage() { return rawMessage; }
+        public long getTimestampMs() { return timestampMs; }
     }
 
     public static final class BatchTestSummary {

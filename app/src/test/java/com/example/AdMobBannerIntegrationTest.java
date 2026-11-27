@@ -15,6 +15,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.example.ads.AdMobBannerHelper;
 import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.MobileAds;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,6 +50,11 @@ public class AdMobBannerIntegrationTest {
                      Robolectric.buildActivity(MainActivity.class).setup()) {
             MainActivity activity = controller.get();
             Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+            assertTrue(
+                    "No test device IDs should be configured for production ads",
+                    MobileAds.getRequestConfiguration().getTestDeviceIds().isEmpty()
+            );
 
             ViewGroup container = activity.findViewById(R.id.ad_banner_container);
             assertNotNull(container);

@@ -28,7 +28,9 @@ import com.example.model.IpDetails;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
 import com.example.network.IpLookupService;
+import com.example.network.ProxyFailureFormatter;
 import com.example.network.ProxySpeedTester;
+import com.example.network.ProxyTester;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -220,18 +222,35 @@ public class ProxyDetailActivity extends AppCompatActivity {
                 });
 
                 if (!diag.isUsable()) {
+                    String localizedReason = ProxyFailureFormatter.format(
+                            this,
+                            diag.getFailureReason(),
+                            diag.getHttpStatusCode(),
+                            proxy.getHost(),
+                            proxy.getPort(),
+                            proxy.getAuthMethod(),
+                            diag.getErrorMessage()
+                    );
+                    repository.recordProxyFailure(
+                            proxy.getId(),
+                            diag.getFailureReason(),
+                            diag.getHttpStatusCode(),
+                            diag.getErrorMessage()
+                    );
                     repository.updateTelemetrySync(proxy.getId(), ProxyConfig.LATENCY_FAILED,
                             proxy.getExitIp(), proxy.getCountry(), proxy.getFailCount() + 1);
                     repository.addLog(ProxyLogEntry.Level.ERROR,
                             com.example.data.ProxyLogFormatter.getString(this, R.string.log_proxy_detail_failed,
-                                    proxy.getAddressDisplay(), diag.getErrorMessage()));
+                                    proxy.getAddressDisplay(), localizedReason));
                     runOnUiThread(() -> {
                         progressSpeedTest.setVisibility(View.GONE);
                         tvSpeedStatus.setText(R.string.label_speed_failed);
-                        renderVerdict(false, diag.getErrorMessage());
+                        renderVerdict(false, localizedReason);
                     });
                     return;
                 }
+
+                repository.clearProxyFailure(proxy.getId());
 
                 // 2. IP & Geolocation check through this proxy
                 IpDetails ipInfo = IpLookupService.lookupViaProxy(proxy);
@@ -299,41 +318,77 @@ public class ProxyDetailActivity extends AppCompatActivity {
     }
 
     private void renderDiagnostics(ProxySpeedTester.DiagnosticResult diag) {
+        ProxyTester.FailureReason reason = diag.getFailureReason();
         if (diag.isTcpReachable()) {
             setBadge(tvDiagTcpStatus, getString(R.string.diag_status_ok) + " (" + diag.getTcpLatencyMs() + "ms)",
                     R.color.status_connected, R.color.status_connected_bg);
         } else {
-            setBadge(tvDiagTcpStatus, getString(R.string.diag_status_fail),
+            int tcpFailRes;
+            if (reason == ProxyTester.FailureReason.TIMEOUT) {
+                tcpFailRes = R.string.diag_tcp_timeout;
+            } else if (reason == ProxyTester.FailureReason.CONNECTION_REFUSED) {
+                tcpFailRes = R.string.diag_tcp_refused;
+            } else if (reason == ProxyTester.FailureReason.HOST_UNREACHABLE) {
+                tcpFailRes = R.string.diag_tcp_unreachable;
+            } else {
+                tcpFailRes = R.string.diag_status_fail;
+            }
+            setBadge(tvDiagTcpStatus, getString(tcpFailRes),
                     R.color.status_error, R.color.status_error_bg);
         }
 
-        switch (diag.getAuthState()) {
-            case VALID:
-                setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_ok),
-                        R.color.status_connected, R.color.status_connected_bg);
-                break;
-            case NOT_REQUIRED:
-                setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_none),
-                        R.color.status_connected, R.color.status_connected_bg);
-                break;
-            case REQUIRED:
-                setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_required),
-                        R.color.status_error, R.color.status_error_bg);
-                break;
-            case FAILED_407:
-                setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_failed),
-                        R.color.status_error, R.color.status_error_bg);
-                break;
-            case UNKNOWN:
-            default:
-                setBadge(tvDiagAuthStatus, getString(R.string.diag_status_fail),
-                        R.color.status_idle, R.color.status_idle_bg);
-                break;
+        if (!diag.isTcpReachable()) {
+            setBadge(tvDiagAuthStatus, getString(R.string.diag_status_skipped),
+                    R.color.status_idle, R.color.status_idle_bg);
+            setBadge(tvDiagHttpsStatus, getString(R.string.diag_status_skipped),
+                    R.color.status_idle, R.color.status_idle_bg);
+            return;
         }
+
+        if (reason == ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH) {
+            setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_scheme_mismatch),
+                    R.color.status_error, R.color.status_error_bg);
+        } else {
+            switch (diag.getAuthState()) {
+                case VALID:
+                    setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_ok),
+                            R.color.status_connected, R.color.status_connected_bg);
+                    break;
+                case NOT_REQUIRED:
+                    setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_none),
+                            R.color.status_connected, R.color.status_connected_bg);
+                    break;
+                case REQUIRED:
+                    setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_required),
+                            R.color.status_error, R.color.status_error_bg);
+                    break;
+                case FAILED_407:
+                    setBadge(tvDiagAuthStatus, getString(R.string.diag_auth_failed),
+                            R.color.status_error, R.color.status_error_bg);
+                    break;
+                case UNKNOWN:
+                default:
+                    setBadge(tvDiagAuthStatus, getString(R.string.diag_status_skipped),
+                            R.color.status_idle, R.color.status_idle_bg);
+                    break;
+            }
+        }
+
+        boolean blockedByAuth = reason == ProxyTester.FailureReason.AUTH_REQUIRED
+                || reason == ProxyTester.FailureReason.AUTH_FAILED
+                || reason == ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH
+                || diag.getAuthState() == ProxySpeedTester.AuthState.REQUIRED
+                || diag.getAuthState() == ProxySpeedTester.AuthState.FAILED_407;
 
         if (diag.isHttpsTunnelOk()) {
             setBadge(tvDiagHttpsStatus, getString(R.string.diag_status_ok),
                     R.color.status_connected, R.color.status_connected_bg);
+        } else if (blockedByAuth) {
+            setBadge(tvDiagHttpsStatus, getString(R.string.diag_status_skipped),
+                    R.color.status_idle, R.color.status_idle_bg);
+        } else if (reason == ProxyTester.FailureReason.HTTP_STATUS_ERROR && diag.getHttpStatusCode() > 0) {
+            setBadge(tvDiagHttpsStatus, "HTTP " + diag.getHttpStatusCode(),
+                    R.color.status_error, R.color.status_error_bg);
         } else {
             setBadge(tvDiagHttpsStatus, getString(R.string.diag_status_fail),
                     R.color.status_error, R.color.status_error_bg);

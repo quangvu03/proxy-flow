@@ -21,7 +21,7 @@ import com.google.android.material.card.MaterialCardView;
 
 /**
  * RecyclerView adapter displaying saved proxies with latency, auth status,
- * active indicator, and quick action buttons.
+ * active/error/untested indicators, and quick action buttons.
  */
 public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.ProxyViewHolder> {
 
@@ -76,6 +76,7 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
     static class ProxyViewHolder extends RecyclerView.ViewHolder {
         private final MaterialCardView cardView;
         private final TextView tvTitle;
+        private final View viewUntestedDot;
         private final TextView tvActiveBadge;
         private final TextView tvAddress;
         private final TextView tvLatencyBadge;
@@ -90,6 +91,7 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             super(itemView);
             cardView = itemView.findViewById(R.id.card_proxy_item);
             tvTitle = itemView.findViewById(R.id.tv_proxy_title);
+            viewUntestedDot = itemView.findViewById(R.id.view_untested_dot);
             tvActiveBadge = itemView.findViewById(R.id.tv_active_badge);
             tvAddress = itemView.findViewById(R.id.tv_proxy_address);
             tvLatencyBadge = itemView.findViewById(R.id.tv_latency_badge);
@@ -107,18 +109,44 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
 
             tvTitle.setText(proxy.getDisplayTitle());
             tvAddress.setText(proxy.getSchemePrefix() + proxy.getAddressDisplay());
-            tvActiveBadge.setVisibility(isActive ? View.VISIBLE : View.GONE);
-
-            boolean isFailed = proxy.getLatencyMs() == ProxyConfig.LATENCY_FAILED;
-            if (isActive) {
-                cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
-                cardView.setStrokeWidth((int) (2 * ctx.getResources().getDisplayMetrics().density));
+            long lat = proxy.getLatencyMs();
+            boolean isFailed = lat == ProxyConfig.LATENCY_FAILED;
+            boolean isUntested = lat == ProxyConfig.LATENCY_UNTESTED;
+            if (isFailed) {
+                if (viewUntestedDot != null) viewUntestedDot.setVisibility(View.GONE);
+                tvActiveBadge.setVisibility(View.VISIBLE);
+                tvActiveBadge.setText(R.string.filter_error);
+                tvActiveBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_error));
+                tvActiveBadge.setBackgroundTintList(
+                        ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_error_bg)));
+                cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.status_error));
+                cardView.setStrokeWidth((int) ((isActive ? 2f : 1.25f) * ctx.getResources().getDisplayMetrics().density));
+            } else if (isUntested) {
+                tvActiveBadge.setVisibility(View.GONE);
+                if (viewUntestedDot != null) {
+                    viewUntestedDot.setVisibility(View.VISIBLE);
+                    viewUntestedDot.setBackgroundTintList(
+                            ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_switching)));
+                }
+                if (isActive) {
+                    cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
+                    cardView.setStrokeWidth((int) (2 * ctx.getResources().getDisplayMetrics().density));
+                } else {
+                    cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_outline));
+                    cardView.setStrokeWidth((int) (1 * ctx.getResources().getDisplayMetrics().density));
+                }
+            } else if (isActive) {
+                if (viewUntestedDot != null) viewUntestedDot.setVisibility(View.GONE);
+                tvActiveBadge.setVisibility(View.VISIBLE);
+                tvActiveBadge.setText(R.string.badge_active_now);
+                tvActiveBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_connected));
                 tvActiveBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_connected_bg)));
-            } else if (isFailed) {
-                cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.status_error));
-                cardView.setStrokeWidth((int) (1.25f * ctx.getResources().getDisplayMetrics().density));
+                cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_primary));
+                cardView.setStrokeWidth((int) (2 * ctx.getResources().getDisplayMetrics().density));
             } else {
+                if (viewUntestedDot != null) viewUntestedDot.setVisibility(View.GONE);
+                tvActiveBadge.setVisibility(View.GONE);
                 cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.md_theme_outline));
                 cardView.setStrokeWidth((int) (1 * ctx.getResources().getDisplayMetrics().density));
             }
@@ -127,14 +155,13 @@ public class ProxyListAdapter extends ListAdapter<ProxyConfig, ProxyListAdapter.
             tvAuthBadge.setText(proxy.getAuthDisplaySummary(ctx));
 
             // Latency badge & Connect button appearance
-            long lat = proxy.getLatencyMs();
-            if (lat == ProxyConfig.LATENCY_UNTESTED) {
+            if (isUntested) {
                 tvLatencyBadge.setText(R.string.latency_untested);
                 tvLatencyBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_idle));
                 tvLatencyBadge.setBackgroundTintList(
                         ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.status_idle_bg)));
                 styleConnectButtonNormal(ctx);
-            } else if (lat == ProxyConfig.LATENCY_FAILED) {
+            } else if (isFailed) {
                 tvLatencyBadge.setText(R.string.latency_failed);
                 tvLatencyBadge.setTextColor(ContextCompat.getColor(ctx, R.color.status_error));
                 tvLatencyBadge.setBackgroundTintList(

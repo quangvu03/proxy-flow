@@ -319,9 +319,17 @@ public class ProxyVpnService extends VpnService
             return null;
         }
         if (!result.isSuccess()) {
-            String reason = !result.getErrorMessage().isEmpty()
-                    ? result.getErrorMessage()
-                    : ProxyLogFormatter.getString(this, R.string.latency_failed);
+            String reason = com.example.network.ProxyFailureFormatter.format(
+                    SettingsPreferences.getLocalizedContext(this),
+                    result.getFailureReason(),
+                    result.getHttpStatusCode(),
+                    chosen.getHost(),
+                    chosen.getPort(),
+                    chosen.getAuthMethod(),
+                    result.getErrorMessage()
+            );
+            repository.recordProxyFailure(chosen.getId(), result.getFailureReason(),
+                    result.getHttpStatusCode(), result.getErrorMessage());
             repository.updateTelemetrySync(
                     chosen.getId(),
                     ProxyConfig.LATENCY_FAILED,
@@ -338,6 +346,7 @@ public class ProxyVpnService extends VpnService
             stopTunnelAndService(errMsg, null, true);
             return null;
         }
+        repository.clearProxyFailure(chosen.getId());
 
         if (chosen.getProtocol().isAutoDetect() && result.getDetectedProtocol() != null) {
             chosen.setProtocol(result.getDetectedProtocol());

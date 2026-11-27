@@ -310,35 +310,75 @@ public class AddEditProxyActivityTest {
     }
 
     @Test
-    public void addEditProxyActivity_portTimeoutErrorShownUnderPortFieldNotInTestCard() {
+    public void addEditProxyActivity_connectionFailuresShowInTestCardAndNeverUnderPortField() {
         AddEditProxyActivity activity = Robolectric.buildActivity(AddEditProxyActivity.class)
                 .setup()
                 .get();
 
         TextInputLayout tilPort = activity.findViewById(R.id.til_proxy_port);
+        TextInputLayout tilAuthMethod = activity.findViewById(R.id.til_proxy_auth_method);
+        TextInputLayout tilPass = activity.findViewById(R.id.til_proxy_pass);
         TextInputEditText etHost = activity.findViewById(R.id.et_proxy_host);
         TextInputEditText etPort = activity.findViewById(R.id.et_proxy_port);
+        TextInputEditText etPass = activity.findViewById(R.id.et_proxy_pass);
         View cardStatus = activity.findViewById(R.id.card_test_connection_status);
+        android.widget.TextView tvResult = activity.findViewById(R.id.tv_test_connection_result);
         View btnSaveAndConnect = activity.findViewById(R.id.btn_save_and_connect_proxy);
         assertNotNull(btnSaveAndConnect);
 
         etHost.setText("203.0.113.10");
         etPort.setText("8080");
-
-        // Port timeout error goes below Port field and hides Test Connect status card
-        activity.applyTestFailureResult("Timeout connecting to the specified port (8080)");
-        assertEquals("Timeout connecting to the specified port (8080)",
-                tilPort.getError() != null ? tilPort.getError().toString() : null);
-        assertEquals(View.GONE, cardStatus.getVisibility());
-
-        // Editing host clears port timeout error while port remains valid
-        etHost.setText("203.0.113.11");
         assertNull(tilPort.getError());
 
-        // Non-timeout error displays inside Test Connect status card
+        // 1. Connection timeout NEVER shows on tilPort; it shows clear message in test status card
+        activity.applyTestFailureResult(
+                new com.example.network.ProxyTester.TestResult(
+                        false, -1, "", "", "Quá thời gian kết nối", null,
+                        com.example.network.ProxyTester.FailureReason.TIMEOUT, -1),
+                "203.0.113.10", 8080);
+        assertNull(tilPort.getError());
+        assertEquals(View.VISIBLE, cardStatus.getVisibility());
+        assertTrue(tvResult.getText().toString().contains(
+                activity.getString(R.string.err_proxy_test_timeout, "203.0.113.10", 8080)));
+
+        // 2. Connection refused displays inside test status card
         activity.applyTestFailureResult("Connection refused");
         assertNull(tilPort.getError());
         assertEquals(View.VISIBLE, cardStatus.getVisibility());
+        assertTrue(tvResult.getText().toString().contains(
+                activity.getString(R.string.err_proxy_test_refused, "203.0.113.10", 8080)));
+
+        // 3. Auth required when Auth = NONE highlights auth method & displays in status card
+        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.NONE);
+        activity.applyTestFailureResult(
+                new com.example.network.ProxyTester.TestResult(
+                        false, -1, "", "", "Proxy yêu cầu xác thực", null,
+                        com.example.network.ProxyTester.FailureReason.AUTH_REQUIRED, 407),
+                "203.0.113.10", 8080);
+        assertNull(tilPort.getError());
+        assertEquals(View.VISIBLE, cardStatus.getVisibility());
+        assertEquals(activity.getString(R.string.error_proxy_requires_auth_short),
+                tilAuthMethod.getError() != null ? tilAuthMethod.getError().toString() : null);
+        assertTrue(tvResult.getText().toString().contains(
+                activity.getString(R.string.err_proxy_test_auth_required)));
+
+        // 4. Wrong credentials highlights password field & shows wrong-credentials detail in card
+        activity.applyAuthMethodSelection(ProxyConfig.AuthMethod.USER_PASS);
+        activity.applyTestFailureResult(
+                new com.example.network.ProxyTester.TestResult(
+                        false, -1, "", "", "Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy", null,
+                        com.example.network.ProxyTester.FailureReason.AUTH_FAILED, 407),
+                "203.0.113.10", 8080);
+        assertNull(tilPort.getError());
+        assertEquals(View.VISIBLE, cardStatus.getVisibility());
+        assertEquals(activity.getString(R.string.error_proxy_credentials_wrong),
+                tilPass.getError() != null ? tilPass.getError().toString() : null);
+        assertTrue(tvResult.getText().toString().contains(
+                activity.getString(R.string.err_proxy_test_auth_failed)));
+
+        // Editing password clears auth error
+        etPass.setText("newpass");
+        assertNull(tilPass.getError());
     }
 
     @Test

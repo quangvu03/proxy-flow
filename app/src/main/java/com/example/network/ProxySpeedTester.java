@@ -50,6 +50,8 @@ public final class ProxySpeedTester {
         private final String errorMessage;
         @Nullable
         private final ProxyConfig.Protocol detectedProtocol;
+        private final ProxyTester.FailureReason failureReason;
+        private final int httpStatusCode;
 
         public DiagnosticResult(boolean tcpReachable, long tcpLatencyMs, AuthState authState,
                                 boolean httpsTunnelOk, boolean usable, String errorMessage) {
@@ -59,6 +61,18 @@ public final class ProxySpeedTester {
         public DiagnosticResult(boolean tcpReachable, long tcpLatencyMs, AuthState authState,
                                 boolean httpsTunnelOk, boolean usable, String errorMessage,
                                 @Nullable ProxyConfig.Protocol detectedProtocol) {
+            this(tcpReachable, tcpLatencyMs, authState, httpsTunnelOk, usable, errorMessage,
+                    detectedProtocol,
+                    usable ? ProxyTester.FailureReason.NONE
+                            : ProxyTester.inferFailureReasonFromMessage(errorMessage),
+                    -1);
+        }
+
+        public DiagnosticResult(boolean tcpReachable, long tcpLatencyMs, AuthState authState,
+                                boolean httpsTunnelOk, boolean usable, String errorMessage,
+                                @Nullable ProxyConfig.Protocol detectedProtocol,
+                                @Nullable ProxyTester.FailureReason failureReason,
+                                int httpStatusCode) {
             this.tcpReachable = tcpReachable;
             this.tcpLatencyMs = tcpLatencyMs;
             this.authState = authState != null ? authState : AuthState.UNKNOWN;
@@ -66,6 +80,10 @@ public final class ProxySpeedTester {
             this.usable = usable;
             this.errorMessage = errorMessage != null ? errorMessage : "";
             this.detectedProtocol = detectedProtocol;
+            this.failureReason = failureReason != null
+                    ? failureReason
+                    : (usable ? ProxyTester.FailureReason.NONE : ProxyTester.FailureReason.PROTOCOL_OR_RESPONSE_ERROR);
+            this.httpStatusCode = httpStatusCode;
         }
 
         public boolean isTcpReachable() { return tcpReachable; }
@@ -76,6 +94,8 @@ public final class ProxySpeedTester {
         public String getErrorMessage() { return errorMessage; }
         @Nullable
         public ProxyConfig.Protocol getDetectedProtocol() { return detectedProtocol; }
+        public ProxyTester.FailureReason getFailureReason() { return failureReason; }
+        public int getHttpStatusCode() { return httpStatusCode; }
     }
 
     public static class SpeedResult {
@@ -118,7 +138,8 @@ public final class ProxySpeedTester {
     public static DiagnosticResult runDiagnostics(ProxyConfig proxy) {
         if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0) {
             return new DiagnosticResult(false, -1, AuthState.UNKNOWN, false, false,
-                    "Thông số Proxy không hợp lệ");
+                    "Thông số Proxy không hợp lệ", null,
+                    ProxyTester.FailureReason.INVALID_CONFIG, -1);
         }
 
         long tcpStart = System.nanoTime();
@@ -127,39 +148,49 @@ public final class ProxySpeedTester {
             tcpProbe.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), CONNECT_TIMEOUT_MS);
             tcpMs = Math.max(1L, (System.nanoTime() - tcpStart) / 1_000_000L);
         } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối TCP đến Proxy";
-            return new DiagnosticResult(false, -1, AuthState.UNKNOWN, false, false, msg);
+            ProxyTester.TestResult classified = ProxyTester.classifyExceptionFailure(e, proxy);
+            return new DiagnosticResult(false, -1, AuthState.UNKNOWN, false, false,
+                    classified.getErrorMessage(), null,
+                    classified.getFailureReason(), classified.getHttpStatusCode());
         }
 
         if (proxy.getProtocol().isAutoDetect()) {
             ProxyTester.TestResult detected = ProxyTester.testProxy(proxy, CONNECT_TIMEOUT_MS);
             if (!detected.isSuccess() || detected.getDetectedProtocol() == null) {
-                String err = detected.getErrorMessage();
-                AuthState state = classifyAuthStateFromError(proxy, err);
-                return new DiagnosticResult(true, tcpMs, state, false, false, err, null);
+                AuthState state = classifyAuthStateFromReason(proxy, detected.getFailureReason(), detected.getErrorMessage());
+                return new DiagnosticResult(true, tcpMs, state, false, false,
+                        detected.getErrorMessage(), null,
+                        detected.getFailureReason(), detected.getHttpStatusCode());
             }
             ProxyConfig resolved = proxy.copy();
             resolved.setProtocol(detected.getDetectedProtocol());
             DiagnosticResult inner = runDiagnostics(resolved);
             return new DiagnosticResult(inner.isTcpReachable(), inner.getTcpLatencyMs(),
                     inner.getAuthState(), inner.isHttpsTunnelOk(), inner.isUsable(),
-                    inner.getErrorMessage(), detected.getDetectedProtocol());
+                    inner.getErrorMessage(), detected.getDetectedProtocol(),
+                    inner.getFailureReason(), inner.getHttpStatusCode());
         }
 
         if (proxy.isSocks5Protocol()) {
             try (Socket ignored = UpstreamProxyConnector.openTunnel(
                     proxy, "speed.cloudflare.com", 443, CONNECT_TIMEOUT_MS)) {
                 AuthState auth = proxy.hasAuth() ? AuthState.VALID : AuthState.NOT_REQUIRED;
-                return new DiagnosticResult(true, tcpMs, auth, true, true, "");
+                return new DiagnosticResult(true, tcpMs, auth, true, true, "",
+                        proxy.getProtocol(), ProxyTester.FailureReason.NONE, 200);
             } catch (UpstreamProxyConnector.ProxyAuthRequiredException reqErr) {
                 return new DiagnosticResult(true, tcpMs, AuthState.REQUIRED, false, false,
-                        reqErr.getMessage() != null ? reqErr.getMessage() : "Proxy SOCKS5 yêu cầu xác thực");
+                        reqErr.getMessage() != null ? reqErr.getMessage() : "Proxy SOCKS5 yêu cầu xác thực",
+                        null, ProxyTester.FailureReason.AUTH_REQUIRED, -1);
             } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+                ProxyTester.TestResult classified = ProxyTester.classifyExceptionFailure(authErr, proxy);
                 return new DiagnosticResult(true, tcpMs, AuthState.FAILED_407, false, false,
-                        authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
+                        classified.getErrorMessage(), null,
+                        classified.getFailureReason(), classified.getHttpStatusCode());
             } catch (IOException e) {
-                String msg = e.getMessage() != null ? e.getMessage() : "Lỗi bắt tay SOCKS5";
-                return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false, msg);
+                ProxyTester.TestResult classified = ProxyTester.classifyExceptionFailure(e, proxy);
+                return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false,
+                        classified.getErrorMessage(), null,
+                        classified.getFailureReason(), classified.getHttpStatusCode());
             }
         }
 
@@ -170,7 +201,8 @@ public final class ProxySpeedTester {
                 int code = attempt.responseHead.getStatusCode();
                 if (code >= 200 && code < 300) {
                     AuthState auth = proxy.hasAuth() ? AuthState.VALID : AuthState.NOT_REQUIRED;
-                    return new DiagnosticResult(true, tcpMs, auth, true, true, "");
+                    return new DiagnosticResult(true, tcpMs, auth, true, true, "",
+                            proxy.getProtocol(), ProxyTester.FailureReason.NONE, code);
                 }
 
                 // Fallback HTTP GET check if CONNECT is restricted by proxy policy
@@ -178,21 +210,49 @@ public final class ProxySpeedTester {
                 if (httpFallback.isSuccess()) {
                     AuthState auth = proxy.hasAuth() ? AuthState.VALID : AuthState.NOT_REQUIRED;
                     return new DiagnosticResult(true, tcpMs, auth, false, true,
-                            "Hỗ trợ HTTP (hạn chế HTTPS CONNECT)");
+                            "Hỗ trợ HTTP (hạn chế HTTPS CONNECT)",
+                            proxy.getProtocol(), ProxyTester.FailureReason.NONE, 200);
+                }
+                if (httpFallback.getFailureReason() == ProxyTester.FailureReason.AUTH_REQUIRED
+                        || httpFallback.getFailureReason() == ProxyTester.FailureReason.AUTH_FAILED
+                        || httpFallback.getFailureReason() == ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH) {
+                    AuthState state = classifyAuthStateFromReason(
+                            proxy, httpFallback.getFailureReason(), httpFallback.getErrorMessage());
+                    return new DiagnosticResult(true, tcpMs, state, false, false,
+                            httpFallback.getErrorMessage(), null,
+                            httpFallback.getFailureReason(), httpFallback.getHttpStatusCode());
                 }
                 return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false,
-                        "Proxy trả về mã lỗi HTTP " + code);
+                        "Proxy trả về mã lỗi HTTP " + code,
+                        null, ProxyTester.FailureReason.HTTP_STATUS_ERROR, code);
             }
         } catch (UpstreamProxyConnector.ProxyAuthRequiredException reqErr) {
             return new DiagnosticResult(true, tcpMs, AuthState.REQUIRED, false, false,
-                    reqErr.getMessage() != null ? reqErr.getMessage() : "Proxy yêu cầu xác thực");
+                    reqErr.getMessage() != null ? reqErr.getMessage() : "Proxy yêu cầu xác thực",
+                    null, ProxyTester.FailureReason.AUTH_REQUIRED, 407);
         } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
+            ProxyTester.TestResult classified = ProxyTester.classifyExceptionFailure(authErr, proxy);
             return new DiagnosticResult(true, tcpMs, AuthState.FAILED_407, false, false,
-                    authErr.getMessage() != null ? authErr.getMessage() : "Lỗi 407: Sai tài khoản hoặc mật khẩu Proxy");
+                    classified.getErrorMessage(), null,
+                    classified.getFailureReason(), 407);
         } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối đến Proxy";
-            return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false, msg);
+            ProxyTester.TestResult classified = ProxyTester.classifyExceptionFailure(e, proxy);
+            return new DiagnosticResult(true, tcpMs, AuthState.UNKNOWN, false, false,
+                    classified.getErrorMessage(), null,
+                    classified.getFailureReason(), classified.getHttpStatusCode());
         }
+    }
+
+    private static AuthState classifyAuthStateFromReason(
+            ProxyConfig proxy, ProxyTester.FailureReason reason, String errorMessage) {
+        if (reason == ProxyTester.FailureReason.AUTH_REQUIRED) {
+            return AuthState.REQUIRED;
+        }
+        if (reason == ProxyTester.FailureReason.AUTH_FAILED
+                || reason == ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH) {
+            return (proxy == null || !proxy.hasAuth()) ? AuthState.REQUIRED : AuthState.FAILED_407;
+        }
+        return classifyAuthStateFromError(proxy, errorMessage);
     }
 
     private static AuthState classifyAuthStateFromError(ProxyConfig proxy, String errorMessage) {

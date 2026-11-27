@@ -169,6 +169,29 @@
             android:indeterminate="true"
             android:visibility="gone" />
 
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_batch_test_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/md_theme_surface"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/md_theme_outline"
+            app:strokeWidth="1dp">
+
+            <TextView
+                android:id="@+id/tv_batch_test_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:textColor="@color/md_theme_onSurface"
+                android:textSize="12.5sp"
+                android:textStyle="bold" />
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Proxy RecyclerView -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_proxies"

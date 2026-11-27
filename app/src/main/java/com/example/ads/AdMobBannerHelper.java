@@ -21,10 +21,8 @@ import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.RequestConfiguration;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -72,11 +70,6 @@ public final class AdMobBannerHelper {
                 : context;
         Runnable initTask = () -> {
             try {
-                RequestConfiguration requestConfig = MobileAds.getRequestConfiguration()
-                        .toBuilder()
-                        .setTestDeviceIds(Collections.singletonList(AdRequest.DEVICE_ID_EMULATOR))
-                        .build();
-                MobileAds.setRequestConfiguration(requestConfig);
                 MobileAds.initialize(appContext, initializationStatus -> markSdkReady());
             } catch (Throwable ignored) {
                 // Ensure pending callbacks are not stranded in headless/test environments

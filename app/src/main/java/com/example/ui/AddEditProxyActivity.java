@@ -37,6 +37,7 @@ import com.example.model.ProxyConfig;
 import com.example.model.ProxyConfig.AuthMethod;
 import com.example.model.ProxyConfig.DnsMode;
 import com.example.model.ProxyConfig.Protocol;
+import com.example.network.ProxyFailureFormatter;
 import com.example.network.ProxyRuntimeManager;
 import com.example.network.ProxyTester;
 import com.example.network.ProxyVpnService;
@@ -47,7 +48,6 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -584,20 +584,28 @@ public class AddEditProxyActivity extends AppCompatActivity {
         tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.md_theme_onSurface));
 
         testExecutor.execute(() -> {
-            ProxyTester.TestResult result = ProxyTester.testProxy(probe, 7000);
+            ProxyTester.TestResult result;
+            try {
+                result = ProxyTester.testProxy(probe, 7000);
+            } catch (Exception ex) {
+                ProxyTester.FailureReason fallbackReason = ProxyTester.inferFailureReasonFromMessage(ex.getMessage());
+                result = new ProxyTester.TestResult(false, -1, "", "",
+                        ex.getMessage() != null ? ex.getMessage() : "", null, fallbackReason, -1);
+            }
+            final ProxyTester.TestResult finalResult = result;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 btnTestConnection.setEnabled(true);
                 progressTestConnection.setVisibility(View.GONE);
-                if (result.isSuccess()) {
+                if (finalResult.isSuccess()) {
                     applyTestSuccessResult(
-                            result.getLatencyMs(),
-                            result.getExitIp(),
-                            result.getCountry(),
-                            result.getDetectedProtocol()
+                            finalResult.getLatencyMs(),
+                            finalResult.getExitIp(),
+                            finalResult.getCountry(),
+                            finalResult.getDetectedProtocol()
                     );
                 } else {
-                    applyTestFailureResult(result.getErrorMessage());
+                    applyTestFailureResult(finalResult, host, port);
                 }
             });
         });
@@ -622,7 +630,9 @@ public class AddEditProxyActivity extends AppCompatActivity {
         testedExitIp = exitIp != null ? exitIp : "";
         testedCountry = country != null ? country : "";
 
-        if (tilPort != null) {
+        clearAuthErrors();
+        String portText = etPort != null && etPort.getText() != null ? etPort.getText().toString().trim() : "";
+        if (tilPort != null && (portText.isEmpty() || parseValidPort(portText) != -1)) {
             tilPort.setError(null);
         }
         if (cardTestConnectionStatus != null) {
@@ -653,50 +663,72 @@ public class AddEditProxyActivity extends AppCompatActivity {
 
     @VisibleForTesting
     public void applyTestFailureResult(@Nullable String errorMessage) {
+        String host = (etHost != null && etHost.getText() != null) ? etHost.getText().toString().trim() : "";
+        String portStr = (etPort != null && etPort.getText() != null) ? etPort.getText().toString().trim() : "";
+        int port = parseValidPort(portStr);
+        ProxyTester.FailureReason reason = ProxyTester.inferFailureReasonFromMessage(errorMessage);
+        ProxyTester.TestResult synthetic = new ProxyTester.TestResult(
+                false, -1, "", "", errorMessage != null ? errorMessage : "", null, reason, -1);
+        applyTestFailureResult(synthetic, host, port);
+    }
+
+    @VisibleForTesting
+    public void applyTestFailureResult(@NonNull ProxyTester.TestResult result,
+                                       @NonNull String host,
+                                       int port) {
         isConnectionTestPassed = false;
         testedLatencyMs = ProxyConfig.LATENCY_FAILED;
         updateSaveAndConnectButtonState();
-        String err = (errorMessage == null || errorMessage.trim().isEmpty())
-                ? getString(R.string.latency_failed)
-                : errorMessage.trim();
-        if (isPortTimeoutError(err)) {
-            if (cardTestConnectionStatus != null) {
-                cardTestConnectionStatus.setVisibility(View.GONE);
-            }
-            if (tilPort != null) {
-                tilPort.setError(err);
-            }
-        } else {
-            String lower = err.toLowerCase(Locale.ROOT);
-            boolean authRelated = lower.contains("407") || lower.contains("xác thực")
-                    || lower.contains("tài khoản") || lower.contains("mật khẩu")
-                    || lower.contains("token");
-            if (authRelated && selectedAuthMethod == AuthMethod.NONE && tilAuthMethod != null) {
+
+        // Port field only checks port format/range (1..65535); never show connection errors on tilPort.
+        String portText = (etPort != null && etPort.getText() != null) ? etPort.getText().toString().trim() : "";
+        if (tilPort != null && (portText.isEmpty() || parseValidPort(portText) != -1)) {
+            tilPort.setError(null);
+        }
+
+        clearAuthErrors();
+        ProxyTester.FailureReason reason = result.getFailureReason();
+        if (reason == ProxyTester.FailureReason.AUTH_REQUIRED) {
+            if (selectedAuthMethod == AuthMethod.NONE && tilAuthMethod != null) {
                 tilAuthMethod.setError(getString(R.string.error_proxy_requires_auth_short));
             }
-            if (cardTestConnectionStatus != null) {
-                cardTestConnectionStatus.setVisibility(View.VISIBLE);
-                cardTestConnectionStatus.setStrokeColor(ContextCompat.getColor(this, R.color.status_error));
+        } else if (reason == ProxyTester.FailureReason.AUTH_SCHEME_MISMATCH) {
+            if (tilAuthMethod != null) {
+                tilAuthMethod.setError(getString(R.string.err_proxy_test_auth_scheme));
             }
-            if (tvTestConnectionResult != null) {
-                tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.status_error));
-                tvTestConnectionResult.setText(getString(R.string.msg_test_connection_failed, err));
+        } else if (reason == ProxyTester.FailureReason.AUTH_FAILED) {
+            if (selectedAuthMethod == AuthMethod.NONE && tilAuthMethod != null) {
+                tilAuthMethod.setError(getString(R.string.error_proxy_requires_auth_short));
+            } else if (selectedAuthMethod == AuthMethod.BEARER_TOKEN && tilToken != null) {
+                tilToken.setError(getString(R.string.error_proxy_token_invalid));
+            } else if (tilPass != null) {
+                tilPass.setError(getString(R.string.error_proxy_credentials_wrong));
             }
+        }
+
+        String detail = formatLocalizedTestFailure(result, host, port);
+        if (cardTestConnectionStatus != null) {
+            cardTestConnectionStatus.setVisibility(View.VISIBLE);
+            cardTestConnectionStatus.setStrokeColor(ContextCompat.getColor(this, R.color.status_error));
+        }
+        if (tvTestConnectionResult != null) {
+            tvTestConnectionResult.setTextColor(ContextCompat.getColor(this, R.color.status_error));
+            tvTestConnectionResult.setText(getString(R.string.msg_test_connection_failed, detail));
         }
     }
 
-    public static boolean isPortTimeoutError(@Nullable String errorMessage) {
-        if (errorMessage == null || errorMessage.trim().isEmpty()) {
-            return false;
-        }
-        String lower = errorMessage.toLowerCase(Locale.ROOT);
-        return lower.contains("timeout connecting to the specified port")
-                || lower.contains("timeout connecting")
-                || lower.contains("connect timed out")
-                || lower.contains("timed out")
-                || lower.contains("timeout")
-                || lower.contains("quá thời gian")
-                || lower.contains("failed to connect");
+    private String formatLocalizedTestFailure(@NonNull ProxyTester.TestResult result,
+                                              @NonNull String host,
+                                              int port) {
+        return ProxyFailureFormatter.format(
+                this,
+                result.getFailureReason(),
+                result.getHttpStatusCode(),
+                host,
+                port,
+                selectedAuthMethod,
+                result.getErrorMessage()
+        );
     }
 
     private void loadExistingProxy(long proxyId, boolean populateFields) {

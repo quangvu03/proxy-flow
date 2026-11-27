@@ -45,7 +45,7 @@ public final class UpstreamProxyConnector {
                 tcp.connect(new InetSocketAddress(proxy.getHost(), proxy.getPort()), timeoutMs);
             } catch (SocketTimeoutException ste) {
                 throw new SocketTimeoutException(
-                        "Timeout connecting to the specified port (" + proxy.getPort() + ")");
+                        "Quá thời gian kết nối tới máy chủ " + proxy.getHost() + ":" + proxy.getPort());
             }
             tcp.setSoTimeout(timeoutMs);
             if (proxy.isTlsProtocol()) {

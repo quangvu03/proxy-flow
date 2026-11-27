@@ -34,6 +34,20 @@ public final class ProxyTester {
 
     private ProxyTester() {}
 
+    public enum FailureReason {
+        NONE,
+        INVALID_CONFIG,
+        AUTH_REQUIRED,
+        AUTH_FAILED,
+        AUTH_SCHEME_MISMATCH,
+        TIMEOUT,
+        CONNECTION_REFUSED,
+        HOST_UNREACHABLE,
+        TLS_FAILED,
+        HTTP_STATUS_ERROR,
+        PROTOCOL_OR_RESPONSE_ERROR
+    }
+
     public static class TestResult {
         private final boolean success;
         private final long latencyMs;
@@ -42,6 +56,8 @@ public final class ProxyTester {
         private final String errorMessage;
         @Nullable
         private final ProxyConfig.Protocol detectedProtocol;
+        private final FailureReason failureReason;
+        private final int httpStatusCode;
 
         public TestResult(boolean success, long latencyMs, String exitIp, String country, String errorMessage) {
             this(success, latencyMs, exitIp, country, errorMessage, null);
@@ -49,12 +65,23 @@ public final class ProxyTester {
 
         public TestResult(boolean success, long latencyMs, String exitIp, String country,
                           String errorMessage, @Nullable ProxyConfig.Protocol detectedProtocol) {
+            this(success, latencyMs, exitIp, country, errorMessage, detectedProtocol,
+                    success ? FailureReason.NONE : inferFailureReasonFromMessage(errorMessage), -1);
+        }
+
+        public TestResult(boolean success, long latencyMs, String exitIp, String country,
+                          String errorMessage, @Nullable ProxyConfig.Protocol detectedProtocol,
+                          @Nullable FailureReason failureReason, int httpStatusCode) {
             this.success = success;
             this.latencyMs = latencyMs;
             this.exitIp = exitIp != null ? exitIp : "";
             this.country = country != null ? country : "";
             this.errorMessage = errorMessage != null ? errorMessage : "";
             this.detectedProtocol = detectedProtocol;
+            this.failureReason = failureReason != null
+                    ? failureReason
+                    : (success ? FailureReason.NONE : FailureReason.PROTOCOL_OR_RESPONSE_ERROR);
+            this.httpStatusCode = httpStatusCode;
         }
 
         public boolean isSuccess() { return success; }
@@ -64,11 +91,21 @@ public final class ProxyTester {
         public String getErrorMessage() { return errorMessage; }
         @Nullable
         public ProxyConfig.Protocol getDetectedProtocol() { return detectedProtocol; }
+        public FailureReason getFailureReason() { return failureReason; }
+        public int getHttpStatusCode() { return httpStatusCode; }
+    }
+
+    private static TestResult failure(FailureReason reason, String errorMessage) {
+        return new TestResult(false, -1, "", "", errorMessage, null, reason, -1);
+    }
+
+    private static TestResult failure(FailureReason reason, int httpStatusCode, String errorMessage) {
+        return new TestResult(false, -1, "", "", errorMessage, null, reason, httpStatusCode);
     }
 
     public static TestResult testProxy(ProxyConfig proxy, int timeoutMs) {
         if (proxy == null || proxy.getHost().isEmpty() || proxy.getPort() <= 0 || proxy.getPort() > 65535) {
-            return new TestResult(false, -1, "", "", "Cấu hình Proxy không hợp lệ");
+            return failure(FailureReason.INVALID_CONFIG, "Cấu hình Proxy không hợp lệ");
         }
 
         if (proxy.getProtocol().isAutoDetect()) {
@@ -101,7 +138,8 @@ public final class ProxyTester {
                     probe.setProtocol(candidate);
                     TestResult r = testSingleProtocol(probe, perProbeTimeout);
                     if (r.isSuccess()) {
-                        return new TestResult(true, r.getLatencyMs(), r.getExitIp(), r.getCountry(), "", candidate);
+                        return new TestResult(true, r.getLatencyMs(), r.getExitIp(), r.getCountry(), "",
+                                candidate, FailureReason.NONE, -1);
                     }
                     return r;
                 }));
@@ -137,8 +175,7 @@ public final class ProxyTester {
             pool.shutdownNow();
         }
 
-        String bestError = selectBestProbeError(failures);
-        return new TestResult(false, -1, "", "", bestError, null);
+        return selectBestProbeFailure(failures);
     }
 
     private static List<ProxyConfig.Protocol> getCandidateProtocolsForPort(int port) {
@@ -166,31 +203,49 @@ public final class ProxyTester {
         );
     }
 
-    private static String selectBestProbeError(List<TestResult> failures) {
-        String best = "";
+    private static TestResult selectBestProbeFailure(List<TestResult> failures) {
+        TestResult best = null;
         int bestScore = -1;
         for (TestResult r : failures) {
+            if (r == null) continue;
             String msg = r.getErrorMessage();
             if (msg == null || msg.trim().isEmpty()) continue;
-            String lower = msg.toLowerCase(Locale.ROOT);
-            int score = 1;
-            if (lower.contains("407") || lower.contains("xác thực")
-                    || lower.contains("tài khoản") || lower.contains("mật khẩu")
-                    || lower.contains("token")) {
-                score = 5;
-            } else if (lower.contains("mã lỗi http")) {
-                score = 4;
-            } else if (lower.contains("timeout") || lower.contains("quá thời gian") || lower.contains("timed out")) {
-                score = 3;
-            } else if (lower.contains("refused")) {
-                score = 2;
-            }
+            int score = scoreFailureReason(r.getFailureReason());
             if (score > bestScore) {
                 bestScore = score;
-                best = msg;
+                best = r;
             }
         }
-        return !best.isEmpty() ? best : "Không tìm thấy giao thức phù hợp hoặc Proxy không phản hồi";
+        if (best != null) {
+            return failure(best.getFailureReason(), best.getHttpStatusCode(), best.getErrorMessage());
+        }
+        return failure(FailureReason.PROTOCOL_OR_RESPONSE_ERROR,
+                "Không tìm thấy giao thức phù hợp hoặc Proxy không phản hồi");
+    }
+
+    private static int scoreFailureReason(@Nullable FailureReason reason) {
+        if (reason == null) return 1;
+        switch (reason) {
+            case AUTH_REQUIRED:
+                return 10;
+            case AUTH_SCHEME_MISMATCH:
+                return 9;
+            case AUTH_FAILED:
+                return 8;
+            case HTTP_STATUS_ERROR:
+                return 7;
+            case CONNECTION_REFUSED:
+                return 6;
+            case HOST_UNREACHABLE:
+                return 5;
+            case TIMEOUT:
+                return 4;
+            case PROTOCOL_OR_RESPONSE_ERROR:
+                return 3;
+            case TLS_FAILED:
+            default:
+                return 2;
+        }
     }
 
     private static TestResult testSingleProtocol(ProxyConfig proxy, int timeoutMs) {
@@ -209,7 +264,7 @@ public final class ProxyTester {
 
             ProxyAuthHelper.HttpResponseHead head = ProxyAuthHelper.readHttpResponseHead(socket.getInputStream());
             if (head == null) {
-                return new TestResult(false, -1, "", "", "Proxy đóng kết nối đột ngột");
+                return failure(FailureReason.PROTOCOL_OR_RESPONSE_ERROR, "Proxy đóng kết nối đột ngột");
             }
 
             if (head.getStatusCode() == 407 && proxy.hasAuth()) {
@@ -237,7 +292,7 @@ public final class ProxyTester {
                         retryHead = ProxyAuthHelper.readHttpResponseHead(socket.getInputStream());
                     }
                     if (retryHead == null) {
-                        return new TestResult(false, -1, "", "", "Proxy đóng kết nối đột ngột");
+                        return failure(FailureReason.PROTOCOL_OR_RESPONSE_ERROR, "Proxy đóng kết nối đột ngột");
                     }
                     head = retryHead;
                 }
@@ -245,8 +300,7 @@ public final class ProxyTester {
 
             int statusCode = head.getStatusCode();
             if (statusCode == 407) {
-                return new TestResult(false, -1, "", "",
-                        ProxyAuthHelper.describe407Failure(proxy, head.getProxyAuthenticateHeaders()));
+                return build407Failure(proxy, head.getProxyAuthenticateHeaders());
             }
 
             BufferedReader reader = new BufferedReader(
@@ -265,7 +319,8 @@ public final class ProxyTester {
                 String exitIp = fields[0];
                 String country = fields[1];
                 if (!exitIp.isEmpty()) {
-                    return new TestResult(true, elapsedMs, exitIp, country, "", proxy.getProtocol());
+                    return new TestResult(true, elapsedMs, exitIp, country, "",
+                            proxy.getProtocol(), FailureReason.NONE, statusCode);
                 }
             }
 
@@ -274,8 +329,7 @@ public final class ProxyTester {
             socket = null;
             return testConnectTunnel(proxy, timeoutMs);
         } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "Không thể kết nối Proxy";
-            return new TestResult(false, -1, "", "", msg);
+            return classifyExceptionFailure(e, proxy);
         } finally {
             closeQuietly(socket);
         }
@@ -325,27 +379,30 @@ public final class ProxyTester {
                 String[] fields = extractProbeFields(body.toString().trim());
                 String exitIp = fields[0];
                 String country = fields[1];
-                return new TestResult(true, elapsedMs, exitIp, country, "", proxy.getProtocol());
+                return new TestResult(true, elapsedMs, exitIp, country, "",
+                        proxy.getProtocol(), FailureReason.NONE, 200);
             }
-            return new TestResult(true, elapsedMs, proxy.getHost(), "", "", proxy.getProtocol());
+            return new TestResult(true, elapsedMs, proxy.getHost(), "", "",
+                    proxy.getProtocol(), FailureReason.NONE, 200);
         } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
-            return new TestResult(false, -1, "", "",
-                    authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
+            return classifyExceptionFailure(authErr, proxy);
         } catch (IOException e) {
-            if (e.getMessage() != null && e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("specified port")) {
-                return new TestResult(false, -1, "", "", e.getMessage());
+            TestResult initialClassified = classifyExceptionFailure(e, proxy);
+            FailureReason r = initialClassified.getFailureReason();
+            if (r == FailureReason.TIMEOUT
+                    || r == FailureReason.CONNECTION_REFUSED
+                    || r == FailureReason.HOST_UNREACHABLE
+                    || r == FailureReason.TLS_FAILED) {
+                return initialClassified;
             }
-            // Fallback CONNECT check to 1.1.1.1:443
+            // Fallback CONNECT check to 1.1.1.1:443 in case ip-api.com is blocked
             long fallbackStart = System.nanoTime();
             try (Socket ignored = UpstreamProxyConnector.openTunnel(proxy, "1.1.1.1", 443, timeoutMs)) {
                 long elapsedMs = Math.max(1L, (System.nanoTime() - fallbackStart) / 1_000_000L);
-                return new TestResult(true, elapsedMs, proxy.getHost(), "", "", proxy.getProtocol());
-            } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
-                return new TestResult(false, -1, "", "",
-                        authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực SOCKS5");
+                return new TestResult(true, elapsedMs, proxy.getHost(), "", "",
+                        proxy.getProtocol(), FailureReason.NONE, 200);
             } catch (IOException fallbackErr) {
-                String msg = fallbackErr.getMessage() != null ? fallbackErr.getMessage() : "Không thể kết nối SOCKS5 Proxy";
-                return new TestResult(false, -1, "", "", msg);
+                return classifyExceptionFailure(fallbackErr, proxy);
             }
         }
     }
@@ -359,16 +416,122 @@ public final class ProxyTester {
                 long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
                 int code = attempt.responseHead.getStatusCode();
                 if (code >= 200 && code < 300) {
-                    return new TestResult(true, elapsedMs, proxy.getHost(), "", "", proxy.getProtocol());
+                    return new TestResult(true, elapsedMs, proxy.getHost(), "", "",
+                            proxy.getProtocol(), FailureReason.NONE, code);
                 }
-                return new TestResult(false, -1, "", "", "Mã lỗi HTTP: " + code);
+                return failure(FailureReason.HTTP_STATUS_ERROR, code, "Mã lỗi HTTP: " + code);
             }
-        } catch (UpstreamProxyConnector.ProxyAuthException authErr) {
-            return new TestResult(false, -1, "", "",
-                    authErr.getMessage() != null ? authErr.getMessage() : "Lỗi xác thực Proxy");
         } catch (IOException e) {
-            return new TestResult(false, -1, "", "", e.getMessage() != null ? e.getMessage() : "Lỗi kết nối");
+            return classifyExceptionFailure(e, proxy);
         }
+    }
+
+    public static TestResult build407Failure(ProxyConfig proxy, @Nullable List<String> authHeaders) {
+        String message = ProxyAuthHelper.describe407Failure(proxy, authHeaders);
+        if (proxy == null || !proxy.hasAuth()) {
+            return failure(FailureReason.AUTH_REQUIRED, 407, message);
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        if (lower.contains("hãy đổi sang")) {
+            return failure(FailureReason.AUTH_SCHEME_MISMATCH, 407, message);
+        }
+        return failure(FailureReason.AUTH_FAILED, 407, message);
+    }
+
+    public static TestResult classifyExceptionFailure(IOException e, @Nullable ProxyConfig proxy) {
+        String host = proxy != null ? proxy.getHost() : "";
+        int port = proxy != null ? proxy.getPort() : 0;
+        String endpoint = (!host.isEmpty() && port > 0) ? (host + ":" + port) : host;
+        String rawMsg = e.getMessage() != null ? e.getMessage().trim() : "";
+
+        if (e instanceof UpstreamProxyConnector.ProxyAuthRequiredException) {
+            return failure(FailureReason.AUTH_REQUIRED,
+                    !rawMsg.isEmpty() ? rawMsg : "Proxy yêu cầu xác thực (vui lòng nhập tài khoản / mật khẩu)");
+        }
+        if (e instanceof UpstreamProxyConnector.ProxyAuthException) {
+            if (proxy == null || !proxy.hasAuth()) {
+                return failure(FailureReason.AUTH_REQUIRED,
+                        !rawMsg.isEmpty() ? rawMsg : "Proxy yêu cầu xác thực (vui lòng nhập tài khoản / mật khẩu)");
+            }
+            String lower = rawMsg.toLowerCase(Locale.ROOT);
+            if (lower.contains("hãy đổi sang") || lower.contains("phương thức")) {
+                return failure(FailureReason.AUTH_SCHEME_MISMATCH, rawMsg);
+            }
+            return failure(FailureReason.AUTH_FAILED,
+                    !rawMsg.isEmpty() ? rawMsg : "Sai tài khoản hoặc mật khẩu Proxy");
+        }
+        if (e instanceof java.net.SocketTimeoutException) {
+            return failure(FailureReason.TIMEOUT,
+                    "Quá thời gian kết nối tới " + endpoint);
+        }
+        if (e instanceof java.net.UnknownHostException) {
+            return failure(FailureReason.HOST_UNREACHABLE,
+                    "Không tìm thấy hoặc không phân giải được máy chủ " + host);
+        }
+        if (e instanceof java.net.NoRouteToHostException) {
+            return failure(FailureReason.HOST_UNREACHABLE,
+                    "Không có đường mạng tới máy chủ " + endpoint);
+        }
+        if (e instanceof javax.net.ssl.SSLException) {
+            return failure(FailureReason.TLS_FAILED,
+                    "Lỗi bắt tay SSL/TLS với " + endpoint);
+        }
+        if (e instanceof java.net.ConnectException) {
+            String lower = rawMsg.toLowerCase(Locale.ROOT);
+            if (lower.contains("refused") || lower.contains("econnrefused")) {
+                return failure(FailureReason.CONNECTION_REFUSED,
+                        "Máy chủ từ chối kết nối tại " + endpoint);
+            }
+            if (lower.contains("timed out") || lower.contains("etimedout")) {
+                return failure(FailureReason.TIMEOUT,
+                        "Quá thời gian kết nối tới " + endpoint);
+            }
+            return failure(FailureReason.HOST_UNREACHABLE,
+                    !rawMsg.isEmpty() ? rawMsg : ("Không thể kết nối tới " + endpoint));
+        }
+
+        FailureReason inferred = inferFailureReasonFromMessage(rawMsg);
+        String msg = !rawMsg.isEmpty() ? rawMsg : "Không thể kết nối Proxy";
+        return failure(inferred, msg);
+    }
+
+    public static FailureReason inferFailureReasonFromMessage(@Nullable String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return FailureReason.PROTOCOL_OR_RESPONSE_ERROR;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        if (lower.contains("hãy đổi sang") || lower.contains("từ chối phương thức")
+                || lower.contains("scheme mismatch")) {
+            return FailureReason.AUTH_SCHEME_MISMATCH;
+        }
+        if (lower.contains("yêu cầu xác thực") || lower.contains("vui lòng nhập tài khoản")
+                || lower.contains("requires auth")) {
+            return FailureReason.AUTH_REQUIRED;
+        }
+        if (lower.contains("sai tài khoản") || lower.contains("mật khẩu")
+                || lower.contains("token") || lower.contains("407")
+                || lower.contains("xác thực")) {
+            return FailureReason.AUTH_FAILED;
+        }
+        if (lower.contains("refused") || lower.contains("econnrefused") || lower.contains("từ chối kết nối")) {
+            return FailureReason.CONNECTION_REFUSED;
+        }
+        if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("quá thời gian")) {
+            return FailureReason.TIMEOUT;
+        }
+        if (lower.contains("unknown host") || lower.contains("unable to resolve")
+                || lower.contains("no route to host") || lower.contains("unreachable")
+                || lower.contains("không tìm thấy") || lower.contains("không phân giải")) {
+            return FailureReason.HOST_UNREACHABLE;
+        }
+        if (lower.contains("ssl") || lower.contains("tls") || lower.contains("handshake")
+                || lower.contains("certificate")) {
+            return FailureReason.TLS_FAILED;
+        }
+        if (lower.contains("mã lỗi http") || lower.contains("http ")) {
+            return FailureReason.HTTP_STATUS_ERROR;
+        }
+        return FailureReason.PROTOCOL_OR_RESPONSE_ERROR;
     }
 
     private static void closeQuietly(@Nullable Socket socket) {

@@ -61,6 +61,10 @@ public class ProxyViewModel extends AndroidViewModel {
         return repository.getBatchTestSummary();
     }
 
+    public LiveData<java.util.Map<Long, ProxyRepository.FailureRecord>> getProxyFailures() {
+        return repository.getProxyFailures();
+    }
+
     public LiveData<ConnectionStatus> getConnectionStatus() {
         return runtimeManager.getStatus();
     }

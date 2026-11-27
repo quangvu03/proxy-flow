@@ -23,6 +23,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -37,6 +38,7 @@ import com.example.model.ProxyLogEntry;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
@@ -71,6 +73,8 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
     private MaterialButton btnImportBulk;
     private MaterialButton btnExportAll;
     private LinearProgressIndicator progressBatchTest;
+    private MaterialCardView cardBatchTestSummary;
+    private TextView tvBatchTestSummary;
     private RecyclerView recyclerProxies;
     private LinearLayout layoutEmpty;
     private ExtendedFloatingActionButton fabAddProxy;
@@ -129,6 +133,8 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
         btnImportBulk = view.findViewById(R.id.btn_import_bulk);
         btnExportAll = view.findViewById(R.id.btn_export_all);
         progressBatchTest = view.findViewById(R.id.progress_batch_test);
+        cardBatchTestSummary = view.findViewById(R.id.card_batch_test_summary);
+        tvBatchTestSummary = view.findViewById(R.id.tv_batch_test_summary);
         recyclerProxies = view.findViewById(R.id.recycler_proxies);
         layoutEmpty = view.findViewById(R.id.layout_empty_proxies);
         fabAddProxy = view.findViewById(R.id.fab_add_proxy);
@@ -161,10 +167,20 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
 
         btnTestAll.setOnClickListener(v -> {
             if (allProxies.isEmpty()) {
-                Toast.makeText(requireContext(), R.string.msg_no_proxy_to_connect, Toast.LENGTH_SHORT).show();
+                if (cardBatchTestSummary != null && tvBatchTestSummary != null) {
+                    cardBatchTestSummary.setVisibility(View.VISIBLE);
+                    cardBatchTestSummary.setStrokeColor(ContextCompat.getColor(requireContext(), R.color.md_theme_outline));
+                    tvBatchTestSummary.setText(R.string.msg_no_proxy_to_connect);
+                    tvBatchTestSummary.setTextColor(ContextCompat.getColor(requireContext(), R.color.md_theme_onSurfaceVariant));
+                }
                 return;
             }
-            Toast.makeText(requireContext(), getString(R.string.msg_testing_all, allProxies.size()), Toast.LENGTH_SHORT).show();
+            if (cardBatchTestSummary != null && tvBatchTestSummary != null) {
+                cardBatchTestSummary.setVisibility(View.VISIBLE);
+                cardBatchTestSummary.setStrokeColor(ContextCompat.getColor(requireContext(), R.color.md_theme_outline));
+                tvBatchTestSummary.setText(getString(R.string.msg_testing_all, allProxies.size()));
+                tvBatchTestSummary.setTextColor(ContextCompat.getColor(requireContext(), R.color.md_theme_onSurface));
+            }
             viewModel.testAllProxies();
         });
 
@@ -200,12 +216,18 @@ public class ProxyListFragment extends Fragment implements ProxyListAdapter.OnPr
         viewModel.getBatchTestSummary().observe(getViewLifecycleOwner(), summary -> {
             if (summary != null && summary.getEventId() > lastShownBatchEventId) {
                 lastShownBatchEventId = summary.getEventId();
-                Toast.makeText(
-                        requireContext(),
-                        getString(R.string.msg_batch_test_summary,
-                                summary.getTotalCount(), summary.getWorkingCount(), summary.getFailedCount()),
-                        Toast.LENGTH_LONG
-                ).show();
+                if (cardBatchTestSummary != null && tvBatchTestSummary != null) {
+                    boolean hasErrors = summary.getFailedCount() > 0;
+                    int color = ContextCompat.getColor(
+                            requireContext(),
+                            hasErrors ? R.color.status_error : R.color.status_connected
+                    );
+                    cardBatchTestSummary.setVisibility(View.VISIBLE);
+                    cardBatchTestSummary.setStrokeColor(color);
+                    tvBatchTestSummary.setTextColor(color);
+                    tvBatchTestSummary.setText(getString(R.string.msg_batch_test_summary,
+                            summary.getTotalCount(), summary.getWorkingCount(), summary.getFailedCount()));
+                }
             }
         });
     }
