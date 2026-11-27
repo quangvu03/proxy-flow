@@ -513,7 +513,7 @@
     <string name="log_traffic_tcp_syn">TCP SYN -> %1$s</string>
     <string name="log_traffic_udp_packet">UDP -> %1$s (%2$d B)</string>
 
-    <string name="label_app_version">الإصدار: %1$s • 100%% Java</string>
+    <string name="label_app_version">الإصدار: %1$s - Flutter 3.6.1</string>
 
     <!-- Connect Quick Proxy Selector -->
     <string name="action_change_proxy_short">تبديل</string>

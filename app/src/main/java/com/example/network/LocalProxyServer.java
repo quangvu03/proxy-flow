@@ -207,7 +207,7 @@ public class LocalProxyServer {
                     if (tListener != null) {
                         tListener.onRequestBlocked(callerPkg, policyResult, targetDisplay);
                     }
-                    sendForbidden(clientOut, "Blocked by ProxyFlow Firewall");
+                    sendForbidden(clientOut, "Blocked by TopProxy Firewall");
                     return;
                 } else if (policyResult == PolicyResult.BLOCK_PRIVATE_ROUTING_DISABLED) {
                     if (tListener != null) {

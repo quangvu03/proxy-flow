@@ -378,7 +378,7 @@ public class ProxyVpnService extends VpnService
         refreshPolicySnapshots();
 
         Builder builder = new Builder();
-        builder.setSession("ProxyFlow - " + proxy.getAddressDisplay());
+        builder.setSession("TopProxy - " + proxy.getAddressDisplay());
         builder.addAddress("10.0.0.2", 32);
         builder.addRoute("0.0.0.0", 0);
         builder.setMtu(1500);
