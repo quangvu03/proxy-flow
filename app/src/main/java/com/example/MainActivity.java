@@ -202,6 +202,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
                 @Override
                 public void onSuccess(@androidx.annotation.NonNull FirebaseUser user) {
                     updateTopLoginPill(user);
+                    com.example.data.CloudSyncManager.recordUserPresenceAsync(MainActivity.this);
                 }
 
                 @Override

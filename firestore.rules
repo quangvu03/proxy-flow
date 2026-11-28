@@ -1,0 +1,220 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Explicit Admin UIDs and verified owner email configured for TopProxy Admin Dashboard
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.uid in ['xuonHbFXXrPQEJVZPjyJy9itC7x1', 'jACOpeQtRie82vw5S20AUWfZxD53'] ||
+        (request.auth.token.email_verified == true &&
+         request.auth.token.email is string &&
+         request.auth.token.email.lower() in ['resetall1st@gmail.com'])
+      );
+    }
+
+    function isValidUserSyncSummary(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 160 &&
+             data.proxyCount is int && data.proxyCount >= 0 && data.proxyCount <= 5000 &&
+             data.workingProxyCount is int && data.workingProxyCount >= 0 && data.workingProxyCount <= 5000 &&
+             data.firewallEnabled is bool &&
+             data.privateRoutingEnabled is bool &&
+             data.themeMode is string && data.themeMode in ['SYSTEM_TIME', 'LIGHT', 'DARK'] &&
+             data.languageTag is string && data.languageTag.size() >= 1 && data.languageTag.size() <= 20 &&
+             data.lastDeviceModel is string && data.lastDeviceModel.size() <= 120 &&
+             data.appVersion is string && data.appVersion.size() <= 30 &&
+             data.syncCount is int && data.syncCount >= 0 && data.syncCount <= 1000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             data.lastSyncAt is timestamp && data.lastSyncAt <= request.time;
+    }
+
+    function isValidCloudProxy(data) {
+      return data.name is string && data.name.size() <= 120 &&
+             data.protocol is string && data.protocol in ['ALL', 'SOCKS5', 'HTTP', 'HTTP_TLS', 'SOCKS5_UDP', 'SOCKS5_TLS'] &&
+             data.host is string && data.host.size() >= 1 && data.host.size() <= 255 &&
+             data.port is int && data.port >= 1 && data.port <= 65535 &&
+             data.authMethod is string && data.authMethod in ['NONE', 'USER_PASS', 'HTTP_BASIC', 'HTTP_DIGEST', 'BEARER_TOKEN'] &&
+             data.username is string && data.username.size() <= 160 &&
+             data.password is string && data.password.size() <= 256 &&
+             data.dnsMode is string && data.dnsMode in ['PROXY', 'CLOUDFLARE', 'GOOGLE', 'CUSTOM'] &&
+             data.customDns is string && data.customDns.size() <= 256 &&
+             data.enabled is bool &&
+             data.latencyMs is int && data.latencyMs >= -2 && data.latencyMs <= 600000 &&
+             data.exitIp is string && data.exitIp.size() <= 64 &&
+             data.country is string && data.country.size() <= 64 &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 100000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSyncPreferences(data) {
+      return data.themeMode is string && data.themeMode in ['SYSTEM_TIME', 'LIGHT', 'DARK'] &&
+             data.languageTag is string && data.languageTag.size() >= 1 && data.languageTag.size() <= 20 &&
+             data.autoStopOnDisconnect is bool &&
+             data.vpnTimerMinutes is int && data.vpnTimerMinutes >= 0 && data.vpnTimerMinutes <= 1440 &&
+             data.firewallEnabled is bool &&
+             data.privateRoutingEnabled is bool &&
+             data.privateRoutingRanges is string && data.privateRoutingRanges.size() <= 2000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSyncEvent(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userLabel is string && data.userLabel.size() <= 120 &&
+             data.deviceModel is string && data.deviceModel.size() <= 120 &&
+             data.uploadedProxies is int && data.uploadedProxies >= 0 && data.uploadedProxies <= 5000 &&
+             data.downloadedProxies is int && data.downloadedProxies >= 0 && data.downloadedProxies <= 5000 &&
+             data.totalProxies is int && data.totalProxies >= 0 && data.totalProxies <= 5000 &&
+             data.appVersion is string && data.appVersion.size() <= 30 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'email', 'proxyCount', 'workingProxyCount',
+                         'firewallEnabled', 'privateRoutingEnabled', 'themeMode', 'languageTag',
+                         'lastDeviceModel', 'appVersion', 'syncCount', 'createdAt', 'updatedAt', 'lastSyncAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'email', 'proxyCount', 'workingProxyCount',
+                         'firewallEnabled', 'privateRoutingEnabled', 'themeMode', 'languageTag',
+                         'lastDeviceModel', 'appVersion', 'syncCount', 'createdAt', 'updatedAt', 'lastSyncAt'
+                       ]) &&
+                       isValidUserSyncSummary(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserSyncSummary(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'email', 'proxyCount', 'workingProxyCount',
+                         'firewallEnabled', 'privateRoutingEnabled', 'themeMode', 'languageTag',
+                         'lastDeviceModel', 'appVersion', 'syncCount', 'updatedAt', 'lastSyncAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      match /proxies/{proxyKey} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(proxyKey) && (request.auth.uid == userId || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(proxyKey) &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll([
+                           'name', 'protocol', 'host', 'port', 'authMethod', 'username', 'password',
+                           'dnsMode', 'customDns', 'enabled', 'latencyMs', 'exitIp', 'country',
+                           'sortOrder', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'name', 'protocol', 'host', 'port', 'authMethod', 'username', 'password',
+                           'dnsMode', 'customDns', 'enabled', 'latencyMs', 'exitIp', 'country',
+                           'sortOrder', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudProxy(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(proxyKey) &&
+                         request.auth.uid == userId &&
+                         isValidCloudProxy(incoming()) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'protocol', 'host', 'port', 'authMethod', 'username', 'password',
+                           'dnsMode', 'customDns', 'enabled', 'latencyMs', 'exitIp', 'country',
+                           'sortOrder', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(proxyKey) && request.auth.uid == userId;
+      }
+
+      match /sync_state/{docId} {
+        allow get: if isSignedIn() && isValidId(userId) && docId == 'preferences' && (request.auth.uid == userId || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         docId == 'preferences' &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll([
+                           'themeMode', 'languageTag', 'autoStopOnDisconnect', 'vpnTimerMinutes',
+                           'firewallEnabled', 'privateRoutingEnabled', 'privateRoutingRanges',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'themeMode', 'languageTag', 'autoStopOnDisconnect', 'vpnTimerMinutes',
+                           'firewallEnabled', 'privateRoutingEnabled', 'privateRoutingRanges',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidSyncPreferences(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         docId == 'preferences' &&
+                         request.auth.uid == userId &&
+                         isValidSyncPreferences(incoming()) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'themeMode', 'languageTag', 'autoStopOnDisconnect', 'vpnTimerMinutes',
+                           'firewallEnabled', 'privateRoutingEnabled', 'privateRoutingRanges',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(userId) && docId == 'preferences' && request.auth.uid == userId;
+      }
+    }
+
+    match /sync_events/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(eventId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'userLabel', 'deviceModel', 'uploadedProxies',
+                         'downloadedProxies', 'totalProxies', 'appVersion', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'userLabel', 'deviceModel', 'uploadedProxies',
+                         'downloadedProxies', 'totalProxies', 'appVersion', 'createdAt'
+                       ]) &&
+                       isValidSyncEvent(incoming());
+
+      allow update, delete: if false;
+    }
+  }
+}

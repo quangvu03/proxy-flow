@@ -522,4 +522,50 @@
     <string name="msg_proxy_selected">Đã chọn Proxy: %1$s</string>
     <string name="msg_empty_proxy_picker">Chưa có Proxy nào trong danh sách. Hãy thêm Proxy mới để kết nối.</string>
     <string name="cd_select_active_proxy">Chọn hoặc đổi Proxy đang dùng</string>
+
+    <!-- Cross-Device Cloud Sync & Admin Dashboard -->
+    <string name="action_sync_across_devices">Đồng bộ giữa các thiết bị</string>
+    <string name="action_syncing_devices">Đang đồng bộ…</string>
+    <string name="action_open_admin_dashboard">Trang quản trị (Admin)</string>
+    <string name="badge_admin_account">Quản trị viên (Admin)</string>
+    <string name="label_last_sync_at">Đồng bộ gần nhất: %1$s</string>
+    <string name="label_never_synced">Chưa đồng bộ lên đám mây</string>
+    <string name="msg_sync_success">Đồng bộ thành công: tải lên %1$d, tải về %2$d (tổng %3$d Proxy)</string>
+    <string name="msg_sync_failed">Đồng bộ thất bại: %1$s</string>
+    <string name="msg_sync_requires_login">Vui lòng đăng nhập Google để đồng bộ giữa các thiết bị</string>
+    <string name="log_cloud_sync_done">Đồng bộ đám mây: +%1$d tải lên, +%2$d tải về</string>
+
+    <string name="msg_firestore_permission_denied">Không có quyền truy cập dữ liệu Firebase</string>
+    <string name="msg_firestore_unavailable">Không thể kết nối Firebase, vui lòng thử lại</string>
+    <string name="msg_firestore_quota_exceeded">Đã vượt giới hạn truy cập Firebase hôm nay</string>
+    <string name="msg_firestore_generic_error">Lỗi đồng bộ dữ liệu Firebase</string>
+
+    <string name="title_admin_dashboard">Thống kê Firebase (Admin)</string>
+    <string name="desc_refresh_stats">Làm mới thống kê</string>
+    <string name="msg_admin_access_denied">Tài khoản của bạn không có quyền truy cập trang Admin</string>
+    <string name="admin_hero_badge">ADMIN • FIREBASE LIVE</string>
+    <string name="admin_hero_title">Tổng quan hệ thống TopProxy</string>
+    <string name="admin_hero_updated_at">Cập nhật từ Firebase lúc %1$s</string>
+    <string name="admin_hero_loading">Đang tải số liệu từ Firebase…</string>
+    <string name="admin_kpi_total_users">Người dùng</string>
+    <string name="admin_kpi_total_proxies">Proxy đồng bộ</string>
+    <string name="admin_kpi_total_syncs">Lượt đồng bộ</string>
+    <string name="admin_kpi_active_24h">Hoạt động 24h</string>
+    <string name="admin_kpi_active_24h_sub">%1$d lượt đồng bộ trong 24h</string>
+    <string name="admin_kpi_working_proxies">Proxy hoạt động</string>
+    <string name="admin_kpi_working_sub">%1$d%% khỏe mạnh</string>
+    <string name="admin_kpi_firewall_users">Bật Tường lửa</string>
+    <string name="admin_kpi_private_routing">Định tuyến riêng</string>
+    <string name="admin_kpi_users_ratio">%1$d / %2$d tài khoản</string>
+    <string name="admin_section_users">Người dùng trên Firebase (%1$d)</string>
+    <string name="admin_section_sync_events">Hoạt động đồng bộ gần đây (%1$d)</string>
+    <string name="admin_empty_users">Chưa có dữ liệu người dùng trên Firebase.</string>
+    <string name="admin_empty_events">Chưa có lượt đồng bộ nào được ghi nhận.</string>
+    <string name="admin_user_proxy_summary">%1$d Proxy (%2$d hoạt động) • %3$d lần đồng bộ</string>
+    <string name="admin_user_device_line">%1$s • v%2$s</string>
+    <string name="admin_event_counts_summary">↑ %1$d tải lên • ↓ %2$d tải về • Tổng %3$d Proxy</string>
+    <string name="admin_badge_admin_short">ADMIN</string>
+    <string name="label_account_uid">UID: %1$s</string>
+    <string name="action_copy_uid">Sao chép UID</string>
+    <string name="msg_uid_copied">Đã sao chép UID: %1$s</string>
 </resources>

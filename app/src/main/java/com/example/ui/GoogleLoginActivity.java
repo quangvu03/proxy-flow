@@ -1,5 +1,9 @@
 package com.example.ui;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -9,6 +13,7 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -16,17 +21,22 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.R;
 import com.example.ads.AppOpenAdManager;
+import com.example.auth.AdminConfig;
 import com.example.auth.GoogleAuthManager;
+import com.example.data.CloudSyncManager;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
+import java.text.DateFormat;
+import java.util.Date;
 import java.util.Locale;
 
 /**
  * Pure Java dedicated screen allowing sign-in exclusively via Google Account
- * (Jetpack Credential Manager + Firebase Auth), as well as switching Google accounts or signing out.
+ * (Jetpack Credential Manager + Firebase Auth), cross-device cloud sync,
+ * and Admin Dashboard access for authorized Admin UIDs.
  */
 public class GoogleLoginActivity extends AppCompatActivity {
 
@@ -35,13 +45,21 @@ public class GoogleLoginActivity extends AppCompatActivity {
     private View cardSignIn;
     private View cardAccount;
     private MaterialButton btnGoogleSignIn;
+    private MaterialButton btnSyncDevices;
+    private MaterialButton btnOpenAdmin;
     private MaterialButton btnSwitchAccount;
     private MaterialButton btnSignOut;
+    private View badgeAdminAccount;
+    private TextView tvSyncStatus;
     private View progressLogin;
 
     private TextView tvAvatarInitial;
     private TextView tvDisplayName;
     private TextView tvEmail;
+    private View layoutAccountUid;
+    private TextView tvUid;
+    @Nullable
+    private String currentUid;
 
     @Nullable
     private FirebaseAuth firebaseAuth;
@@ -71,21 +89,34 @@ public class GoogleLoginActivity extends AppCompatActivity {
         cardSignIn = findViewById(R.id.card_google_sign_in);
         cardAccount = findViewById(R.id.card_google_account);
         btnGoogleSignIn = findViewById(R.id.btn_google_sign_in);
+        btnSyncDevices = findViewById(R.id.btn_sync_devices);
+        btnOpenAdmin = findViewById(R.id.btn_open_admin_dashboard);
         btnSwitchAccount = findViewById(R.id.btn_switch_google_account);
         btnSignOut = findViewById(R.id.btn_google_sign_out);
+        badgeAdminAccount = findViewById(R.id.badge_admin_account);
+        tvSyncStatus = findViewById(R.id.tv_sync_status);
         progressLogin = findViewById(R.id.progress_google_login);
 
         tvAvatarInitial = findViewById(R.id.tv_google_avatar_initial);
         tvDisplayName = findViewById(R.id.tv_google_display_name);
         tvEmail = findViewById(R.id.tv_google_email);
+        layoutAccountUid = findViewById(R.id.layout_account_uid);
+        tvUid = findViewById(R.id.tv_google_uid);
 
         firebaseAuth = GoogleAuthManager.getFirebaseAuth(this);
 
         btnGoogleSignIn.setOnClickListener(v -> triggerGoogleSignIn());
+        btnSyncDevices.setOnClickListener(v -> triggerCrossDeviceSync());
+        btnOpenAdmin.setOnClickListener(v -> openAdminDashboard());
         btnSwitchAccount.setOnClickListener(v -> triggerGoogleSignIn());
         btnSignOut.setOnClickListener(v -> performSignOut());
+        layoutAccountUid.setOnClickListener(v -> copyCurrentUid());
 
-        renderUser(GoogleAuthManager.getCurrentUser(this));
+        FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(this);
+        renderUser(currentUser);
+        if (currentUser != null) {
+            CloudSyncManager.recordUserPresenceAsync(this);
+        }
     }
 
     @Override
@@ -119,6 +150,7 @@ public class GoogleLoginActivity extends AppCompatActivity {
                 }
                 setLoading(false);
                 renderUser(user);
+                CloudSyncManager.recordUserPresenceAsync(GoogleLoginActivity.this);
                 String label = !TextUtils.isEmpty(user.getEmail())
                         ? user.getEmail()
                         : GoogleAuthManager.getDisplayLabel(user, getString(R.string.title_google_login));
@@ -153,6 +185,56 @@ public class GoogleLoginActivity extends AppCompatActivity {
         });
     }
 
+    private void triggerCrossDeviceSync() {
+        if (isLoading) {
+            return;
+        }
+        hideError();
+        setLoading(true);
+        btnSyncDevices.setText(R.string.action_syncing_devices);
+
+        CloudSyncManager.syncAcrossDevices(this, new CloudSyncManager.SyncCallback() {
+            @Override
+            public void onSuccess(@NonNull CloudSyncManager.SyncResult result) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                setLoading(false);
+                btnSyncDevices.setText(R.string.action_sync_across_devices);
+                updateSyncStatusText(result.getSyncedAtMs());
+                Toast.makeText(
+                        GoogleLoginActivity.this,
+                        getString(
+                                R.string.msg_sync_success,
+                                result.getUploadedCount(),
+                                result.getDownloadedCount(),
+                                result.getTotalProxies()
+                        ),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                setLoading(false);
+                btnSyncDevices.setText(R.string.action_sync_across_devices);
+                showError(getString(R.string.msg_sync_failed, message));
+            }
+        });
+    }
+
+    private void openAdminDashboard() {
+        FirebaseUser current = GoogleAuthManager.getCurrentUser(this);
+        if (!AdminConfig.isAdmin(current)) {
+            Toast.makeText(this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        startActivity(new Intent(this, AdminDashboardActivity.class));
+    }
+
     private void performSignOut() {
         if (isLoading) {
             return;
@@ -171,33 +253,94 @@ public class GoogleLoginActivity extends AppCompatActivity {
 
     private void renderUser(@Nullable FirebaseUser user) {
         if (user == null) {
+            currentUid = null;
             cardSignIn.setVisibility(View.VISIBLE);
             cardAccount.setVisibility(View.GONE);
             return;
         }
-        cardSignIn.setVisibility(View.GONE);
-        cardAccount.setVisibility(View.VISIBLE);
-
         String displayName = !TextUtils.isEmpty(user.getDisplayName())
                 ? user.getDisplayName()
                 : GoogleAuthManager.getDisplayLabel(user, getString(R.string.title_google_login));
         String email = !TextUtils.isEmpty(user.getEmail()) ? user.getEmail() : "";
+        long lastSyncMs = CloudSyncManager.getLastSyncTimestampMs(this, user.getUid());
 
-        String initialSource = !TextUtils.isEmpty(displayName) ? displayName : email;
+        renderSignedInAccountForUi(user.getUid(), displayName, email, user.isEmailVerified(), lastSyncMs);
+    }
+
+    @VisibleForTesting
+    public void renderSignedInAccountForUi(
+            @Nullable String uid,
+            @Nullable String displayName,
+            @Nullable String email,
+            long lastSyncMs) {
+        renderSignedInAccountForUi(uid, displayName, email, false, lastSyncMs);
+    }
+
+    @VisibleForTesting
+    public void renderSignedInAccountForUi(
+            @Nullable String uid,
+            @Nullable String displayName,
+            @Nullable String email,
+            boolean emailVerified,
+            long lastSyncMs) {
+        cardSignIn.setVisibility(View.GONE);
+        cardAccount.setVisibility(View.VISIBLE);
+
+        String safeUid = uid != null ? uid.trim() : "";
+        currentUid = safeUid;
+        String safeName = !TextUtils.isEmpty(displayName)
+                ? displayName.trim()
+                : getString(R.string.title_google_login);
+        String safeEmail = email != null ? email.trim() : "";
+
+        String initialSource = !TextUtils.isEmpty(safeName) ? safeName : safeEmail;
         String initial = !TextUtils.isEmpty(initialSource)
                 ? initialSource.substring(0, 1).toUpperCase(Locale.getDefault())
                 : "G";
 
         tvAvatarInitial.setText(initial);
-        tvDisplayName.setText(displayName);
-        tvEmail.setText(email);
-        tvEmail.setVisibility(TextUtils.isEmpty(email) ? View.GONE : View.VISIBLE);
+        tvDisplayName.setText(safeName);
+        tvEmail.setText(safeEmail);
+        tvEmail.setVisibility(TextUtils.isEmpty(safeEmail) ? View.GONE : View.VISIBLE);
+        layoutAccountUid.setVisibility(TextUtils.isEmpty(safeUid) ? View.GONE : View.VISIBLE);
+        if (!TextUtils.isEmpty(safeUid)) {
+            tvUid.setText(getString(R.string.label_account_uid, safeUid));
+        }
+
+        boolean isAdmin = AdminConfig.isAdmin(safeUid, safeEmail, emailVerified);
+        badgeAdminAccount.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
+        btnOpenAdmin.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
+        btnSyncDevices.setVisibility(View.VISIBLE);
+        updateSyncStatusText(lastSyncMs);
+    }
+
+    private void copyCurrentUid() {
+        if (TextUtils.isEmpty(currentUid)) {
+            return;
+        }
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("Firebase UID", currentUid));
+            Toast.makeText(this, getString(R.string.msg_uid_copied, currentUid), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void updateSyncStatusText(long syncedAtMs) {
+        if (syncedAtMs <= 0L) {
+            tvSyncStatus.setText(R.string.label_never_synced);
+            return;
+        }
+        String formatted = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault())
+                .format(new Date(syncedAtMs));
+        tvSyncStatus.setText(getString(R.string.label_last_sync_at, formatted));
     }
 
     private void setLoading(boolean loading) {
         isLoading = loading;
         progressLogin.setVisibility(loading ? View.VISIBLE : View.INVISIBLE);
         btnGoogleSignIn.setEnabled(!loading);
+        btnSyncDevices.setEnabled(!loading);
+        btnOpenAdmin.setEnabled(!loading);
         btnSwitchAccount.setEnabled(!loading);
         btnSignOut.setEnabled(!loading);
     }

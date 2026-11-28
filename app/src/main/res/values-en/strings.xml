@@ -522,4 +522,50 @@
     <string name="msg_proxy_selected">Selected proxy: %1$s</string>
     <string name="msg_empty_proxy_picker">No proxies saved yet. Add a proxy to start connecting.</string>
     <string name="cd_select_active_proxy">Select or switch active proxy</string>
+
+    <!-- Cross-Device Cloud Sync & Admin Dashboard -->
+    <string name="action_sync_across_devices">Sync across devices</string>
+    <string name="action_syncing_devices">Syncing…</string>
+    <string name="action_open_admin_dashboard">Admin Dashboard</string>
+    <string name="badge_admin_account">Administrator</string>
+    <string name="label_last_sync_at">Last synced: %1$s</string>
+    <string name="label_never_synced">Not yet synced to cloud</string>
+    <string name="msg_sync_success">Sync complete: uploaded %1$d, downloaded %2$d (%3$d total Proxies)</string>
+    <string name="msg_sync_failed">Sync failed: %1$s</string>
+    <string name="msg_sync_requires_login">Please sign in with Google to sync across devices</string>
+    <string name="log_cloud_sync_done">Cloud sync: +%1$d uploaded, +%2$d downloaded</string>
+
+    <string name="msg_firestore_permission_denied">Permission denied by Firebase security rules</string>
+    <string name="msg_firestore_unavailable">Firebase service unavailable, please try again</string>
+    <string name="msg_firestore_quota_exceeded">Daily Firebase quota exceeded</string>
+    <string name="msg_firestore_generic_error">Firebase data error</string>
+
+    <string name="title_admin_dashboard">Firebase Admin Stats</string>
+    <string name="desc_refresh_stats">Refresh statistics</string>
+    <string name="msg_admin_access_denied">Your account does not have Admin permission</string>
+    <string name="admin_hero_badge">ADMIN • FIREBASE LIVE</string>
+    <string name="admin_hero_title">TopProxy System Overview</string>
+    <string name="admin_hero_updated_at">Updated from Firebase at %1$s</string>
+    <string name="admin_hero_loading">Loading live metrics from Firebase…</string>
+    <string name="admin_kpi_total_users">Users</string>
+    <string name="admin_kpi_total_proxies">Synced Proxies</string>
+    <string name="admin_kpi_total_syncs">Sync Runs</string>
+    <string name="admin_kpi_active_24h">Active 24h</string>
+    <string name="admin_kpi_active_24h_sub">%1$d syncs in 24h</string>
+    <string name="admin_kpi_working_proxies">Working Proxies</string>
+    <string name="admin_kpi_working_sub">%1$d%% healthy</string>
+    <string name="admin_kpi_firewall_users">Firewall Enabled</string>
+    <string name="admin_kpi_private_routing">Private Routing</string>
+    <string name="admin_kpi_users_ratio">%1$d / %2$d accounts</string>
+    <string name="admin_section_users">Firebase Users (%1$d)</string>
+    <string name="admin_section_sync_events">Recent Sync Activity (%1$d)</string>
+    <string name="admin_empty_users">No synced users found in Firebase yet.</string>
+    <string name="admin_empty_events">No sync events recorded yet.</string>
+    <string name="admin_user_proxy_summary">%1$d Proxies (%2$d working) • %3$d syncs</string>
+    <string name="admin_user_device_line">%1$s • v%2$s</string>
+    <string name="admin_event_counts_summary">↑ %1$d uploaded • ↓ %2$d downloaded • %3$d total</string>
+    <string name="admin_badge_admin_short">ADMIN</string>
+    <string name="label_account_uid">UID: %1$s</string>
+    <string name="action_copy_uid">Copy UID</string>
+    <string name="msg_uid_copied">Copied UID: %1$s</string>
 </resources>

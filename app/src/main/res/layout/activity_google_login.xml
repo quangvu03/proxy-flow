@@ -11,9 +11,11 @@
         android:id="@+id/google_login_toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
+        android:background="@color/md_theme_surface"
         app:navigationContentDescription="@string/action_back"
-        app:navigationIcon="@drawable/ic_back" />
+        app:navigationIcon="@drawable/ic_back"
+        app:title="@string/settings_group_account"
+        app:titleTextColor="@color/md_theme_onSurface" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/progress_google_login"
@@ -226,6 +228,42 @@
                         android:textSize="14sp" />
 
                     <LinearLayout
+                        android:id="@+id/layout_account_uid"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_pill"
+                        android:backgroundTint="@color/md_theme_surfaceContainerHigh"
+                        android:clickable="true"
+                        android:contentDescription="@string/action_copy_uid"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackgroundBorderless"
+                        android:gravity="center_vertical"
+                        android:minHeight="48dp"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="8dp">
+
+                        <TextView
+                            android:id="@+id/tv_google_uid"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="middle"
+                            android:maxWidth="240dp"
+                            android:singleLine="true"
+                            android:textColor="@color/md_theme_onSurfaceVariant"
+                            android:textSize="12sp" />
+
+                        <ImageView
+                            android:layout_width="15dp"
+                            android:layout_height="15dp"
+                            android:layout_marginStart="6dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_copy"
+                            app:tint="@color/md_theme_primary" />
+                    </LinearLayout>
+
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
@@ -253,12 +291,81 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
+                    <LinearLayout
+                        android:id="@+id/badge_admin_account"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_pill"
+                        android:backgroundTint="@color/md_theme_secondaryContainer"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="15dp"
+                            android:layout_height="15dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_admin_panel"
+                            app:tint="@color/md_theme_secondary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="@string/badge_admin_account"
+                            android:textColor="@color/md_theme_onSecondaryContainer"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_sync_devices"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="20dp"
+                        android:text="@string/action_sync_across_devices"
+                        app:backgroundTint="@color/md_theme_primary"
+                        app:cornerRadius="16dp"
+                        app:icon="@drawable/ic_cloud_sync"
+                        app:iconGravity="textStart"
+                        app:iconSize="20dp" />
+
+                    <TextView
+                        android:id="@+id/tv_sync_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center"
+                        android:text="@string/label_never_synced"
+                        android:textColor="@color/md_theme_onSurfaceVariant"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_open_admin_dashboard"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/action_open_admin_dashboard"
+                        android:textColor="@color/md_theme_onSecondaryContainer"
+                        android:visibility="gone"
+                        app:backgroundTint="@color/md_theme_secondaryContainer"
+                        app:cornerRadius="16dp"
+                        app:icon="@drawable/ic_admin_panel"
+                        app:iconGravity="textStart"
+                        app:iconSize="20dp"
+                        app:iconTint="@color/md_theme_secondary" />
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_switch_google_account"
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="50dp"
-                        android:layout_marginTop="22dp"
+                        android:layout_marginTop="14dp"
                         android:text="@string/action_switch_google_account"
                         app:cornerRadius="16dp"
                         app:icon="@drawable/ic_google_g"

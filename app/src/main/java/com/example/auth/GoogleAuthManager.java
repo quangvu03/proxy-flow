@@ -142,29 +142,38 @@ public final class GoogleAuthManager {
                 .addCredentialOption(googleIdOption)
                 .build();
 
-        CredentialManager credentialManager = CredentialManager.create(context);
-        credentialManager.getCredentialAsync(
-                context,
-                request,
-                null,
-                AUTH_EXECUTOR,
-                new CredentialManagerCallback<>() {
-                    @Override
-                    public void onResult(GetCredentialResponse result) {
-                        handleCredentialResponse(context.getApplicationContext(), auth, result, callback);
-                    }
+        try {
+            CredentialManager credentialManager = CredentialManager.create(context);
+            credentialManager.getCredentialAsync(
+                    context,
+                    request,
+                    null,
+                    AUTH_EXECUTOR,
+                    new CredentialManagerCallback<>() {
+                        @Override
+                        public void onResult(GetCredentialResponse result) {
+                            handleCredentialResponse(context.getApplicationContext(), auth, result, callback);
+                        }
 
-                    @Override
-                    public void onError(@NonNull GetCredentialException e) {
-                        if (e instanceof GetCredentialCancellationException) {
-                            Log.w(TAG, "Silent Google Sign-In cancelled: " + e.getMessage());
-                        }
-                        if (callback != null) {
-                            MAIN_HANDLER.post(callback::onCancelled);
+                        @Override
+                        public void onError(@NonNull GetCredentialException e) {
+                            if (e instanceof GetCredentialCancellationException) {
+                                Log.w(TAG, "Silent Google Sign-In cancelled: " + e.getMessage());
+                            } else {
+                                Log.w(TAG, "Silent Google Sign-In failed: " + e.getMessage());
+                            }
+                            if (callback != null) {
+                                MAIN_HANDLER.post(callback::onCancelled);
+                            }
                         }
                     }
-                }
-        );
+            );
+        } catch (Exception e) {
+            Log.w(TAG, "Silent Google Sign-In failed to launch: " + e.getMessage(), e);
+            if (callback != null) {
+                MAIN_HANDLER.post(callback::onCancelled);
+            }
+        }
     }
 
     /**
@@ -183,34 +192,43 @@ public final class GoogleAuthManager {
                 .addCredentialOption(signInOption)
                 .build();
 
-        CredentialManager credentialManager = CredentialManager.create(activity);
-        credentialManager.getCredentialAsync(
-                activity,
-                request,
-                null,
-                AUTH_EXECUTOR,
-                new CredentialManagerCallback<>() {
-                    @Override
-                    public void onResult(GetCredentialResponse result) {
-                        handleCredentialResponse(activity.getApplicationContext(), auth, result, callback);
-                    }
+        try {
+            CredentialManager credentialManager = CredentialManager.create(activity);
+            credentialManager.getCredentialAsync(
+                    activity,
+                    request,
+                    null,
+                    AUTH_EXECUTOR,
+                    new CredentialManagerCallback<>() {
+                        @Override
+                        public void onResult(GetCredentialResponse result) {
+                            handleCredentialResponse(activity.getApplicationContext(), auth, result, callback);
+                        }
 
-                    @Override
-                    public void onError(@NonNull GetCredentialException e) {
-                        if (e instanceof GetCredentialCancellationException) {
-                            Log.w(TAG, "Google Sign-In flow cancelled or dismissed: " + e.getMessage(), e);
-                            MAIN_HANDLER.post(callback::onCancelled);
-                        } else {
-                            Log.e(TAG, "Google Sign-In failed", e);
-                            String msg = e.getLocalizedMessage();
-                            String fallback = msg != null && !msg.isEmpty()
-                                    ? msg
-                                    : activity.getString(R.string.msg_google_login_cancelled);
-                            MAIN_HANDLER.post(() -> callback.onError(fallback));
+                        @Override
+                        public void onError(@NonNull GetCredentialException e) {
+                            if (e instanceof GetCredentialCancellationException) {
+                                Log.w(TAG, "Google Sign-In flow cancelled or dismissed: " + e.getMessage(), e);
+                                MAIN_HANDLER.post(callback::onCancelled);
+                            } else {
+                                Log.e(TAG, "Google Sign-In failed", e);
+                                String msg = e.getLocalizedMessage();
+                                String fallback = msg != null && !msg.isEmpty()
+                                        ? msg
+                                        : activity.getString(R.string.msg_google_login_cancelled);
+                                MAIN_HANDLER.post(() -> callback.onError(fallback));
+                            }
                         }
                     }
-                }
-        );
+            );
+        } catch (Exception e) {
+            Log.e(TAG, "Google Sign-In failed to launch", e);
+            String msg = e.getLocalizedMessage();
+            String fallback = msg != null && !msg.isEmpty()
+                    ? msg
+                    : activity.getString(R.string.msg_google_config_missing);
+            MAIN_HANDLER.post(() -> callback.onError(fallback));
+        }
     }
 
     private static void handleCredentialResponse(
@@ -265,24 +283,29 @@ public final class GoogleAuthManager {
     public static void signOut(@NonNull Context context, @Nullable Runnable onComplete) {
         Context appContext = context.getApplicationContext();
         FirebaseAuth auth = getFirebaseAuth(appContext);
-        CredentialManager credentialManager = CredentialManager.create(appContext);
-        credentialManager.clearCredentialStateAsync(
-                new ClearCredentialStateRequest(),
-                null,
-                AUTH_EXECUTOR,
-                new CredentialManagerCallback<>() {
-                    @Override
-                    public void onResult(Void result) {
-                        finishSignOut(appContext, auth, onComplete);
-                    }
+        try {
+            CredentialManager credentialManager = CredentialManager.create(appContext);
+            credentialManager.clearCredentialStateAsync(
+                    new ClearCredentialStateRequest(),
+                    null,
+                    AUTH_EXECUTOR,
+                    new CredentialManagerCallback<>() {
+                        @Override
+                        public void onResult(Void result) {
+                            finishSignOut(appContext, auth, onComplete);
+                        }
 
-                    @Override
-                    public void onError(@NonNull ClearCredentialException e) {
-                        Log.w(TAG, "Failed to clear credential state: " + e.getMessage());
-                        finishSignOut(appContext, auth, onComplete);
+                        @Override
+                        public void onError(@NonNull ClearCredentialException e) {
+                            Log.w(TAG, "Failed to clear credential state: " + e.getMessage());
+                            finishSignOut(appContext, auth, onComplete);
+                        }
                     }
-                }
-        );
+            );
+        } catch (Exception e) {
+            Log.w(TAG, "CredentialManager clearCredentialStateAsync threw exception: " + e.getMessage(), e);
+            finishSignOut(appContext, auth, onComplete);
+        }
     }
 
     private static void finishSignOut(

@@ -1,0 +1,302 @@
+{
+  "entities": {
+    "UserSyncSummary": {
+      "title": "UserSyncSummary",
+      "description": "Per-user cloud sync profile and aggregated proxy/device statistics.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Google account display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Google account email address."
+        },
+        "proxyCount": {
+          "type": "integer",
+          "description": "Total number of proxies synced for this user."
+        },
+        "workingProxyCount": {
+          "type": "integer",
+          "description": "Number of healthy/working proxies."
+        },
+        "firewallEnabled": {
+          "type": "boolean",
+          "description": "Whether firewall protection is enabled."
+        },
+        "privateRoutingEnabled": {
+          "type": "boolean",
+          "description": "Whether private network routing via proxy is enabled."
+        },
+        "themeMode": {
+          "type": "string",
+          "enum": ["SYSTEM_TIME", "LIGHT", "DARK"],
+          "description": "Active app theme preference."
+        },
+        "languageTag": {
+          "type": "string",
+          "description": "Active app language tag."
+        },
+        "lastDeviceModel": {
+          "type": "string",
+          "description": "Manufacturer and model of the most recently synced device."
+        },
+        "appVersion": {
+          "type": "string",
+          "description": "TopProxy app version string."
+        },
+        "syncCount": {
+          "type": "integer",
+          "description": "Cumulative number of cross-device sync operations."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user record was first created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user record was last updated."
+        },
+        "lastSyncAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest cross-device sync."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "email",
+        "proxyCount",
+        "workingProxyCount",
+        "firewallEnabled",
+        "privateRoutingEnabled",
+        "themeMode",
+        "languageTag",
+        "lastDeviceModel",
+        "appVersion",
+        "syncCount",
+        "createdAt",
+        "updatedAt",
+        "lastSyncAt"
+      ]
+    },
+    "CloudProxyConfig": {
+      "title": "CloudProxyConfig",
+      "description": "Individual proxy configuration synced across user devices.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name for the proxy."
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["ALL", "SOCKS5", "HTTP", "HTTP_TLS", "SOCKS5_UDP", "SOCKS5_TLS"],
+          "description": "Proxy protocol type."
+        },
+        "host": {
+          "type": "string",
+          "description": "Proxy hostname or IP address."
+        },
+        "port": {
+          "type": "integer",
+          "description": "Proxy port (1-65535)."
+        },
+        "authMethod": {
+          "type": "string",
+          "enum": ["NONE", "USER_PASS", "HTTP_BASIC", "HTTP_DIGEST", "BEARER_TOKEN"],
+          "description": "Authentication scheme."
+        },
+        "username": {
+          "type": "string",
+          "description": "Proxy auth username."
+        },
+        "password": {
+          "type": "string",
+          "description": "Proxy auth password or bearer token."
+        },
+        "dnsMode": {
+          "type": "string",
+          "enum": ["PROXY", "CLOUDFLARE", "GOOGLE", "CUSTOM"],
+          "description": "DNS resolution strategy."
+        },
+        "customDns": {
+          "type": "string",
+          "description": "Custom DNS server list."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether proxy is enabled."
+        },
+        "latencyMs": {
+          "type": "integer",
+          "description": "Last measured latency in ms (-1 untested, -2 failed)."
+        },
+        "exitIp": {
+          "type": "string",
+          "description": "Last observed exit IP address."
+        },
+        "country": {
+          "type": "string",
+          "description": "Last observed country label."
+        },
+        "sortOrder": {
+          "type": "integer",
+          "description": "Display ordering index."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last sync update."
+        }
+      },
+      "required": [
+        "name",
+        "protocol",
+        "host",
+        "port",
+        "authMethod",
+        "username",
+        "password",
+        "dnsMode",
+        "customDns",
+        "enabled",
+        "latencyMs",
+        "exitIp",
+        "country",
+        "sortOrder",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncPreferences": {
+      "title": "SyncPreferences",
+      "description": "User application settings synced across devices.",
+      "type": "object",
+      "properties": {
+        "themeMode": {
+          "type": "string",
+          "enum": ["SYSTEM_TIME", "LIGHT", "DARK"]
+        },
+        "languageTag": {
+          "type": "string"
+        },
+        "autoStopOnDisconnect": {
+          "type": "boolean"
+        },
+        "vpnTimerMinutes": {
+          "type": "integer"
+        },
+        "firewallEnabled": {
+          "type": "boolean"
+        },
+        "privateRoutingEnabled": {
+          "type": "boolean"
+        },
+        "privateRoutingRanges": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "themeMode",
+        "languageTag",
+        "autoStopOnDisconnect",
+        "vpnTimerMinutes",
+        "firewallEnabled",
+        "privateRoutingEnabled",
+        "privateRoutingRanges",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncEvent": {
+      "title": "SyncEvent",
+      "description": "Immutable telemetry event logged whenever a user syncs across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "userLabel": {
+          "type": "string"
+        },
+        "deviceModel": {
+          "type": "string"
+        },
+        "uploadedProxies": {
+          "type": "integer"
+        },
+        "downloadedProxies": {
+          "type": "integer"
+        },
+        "totalProxies": {
+          "type": "integer"
+        },
+        "appVersion": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "userLabel",
+        "deviceModel",
+        "uploadedProxies",
+        "downloadedProxies",
+        "totalProxies",
+        "appVersion",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserSyncSummary"
+      },
+      "description": "User profile and aggregated cross-device sync telemetry."
+    },
+    "/users/{userId}/proxies/{proxyKey}": {
+      "schema": {
+        "$ref": "#/entities/CloudProxyConfig"
+      },
+      "description": "Synced proxy entries owned by the authenticated user."
+    },
+    "/users/{userId}/sync_state/{docId}": {
+      "schema": {
+        "$ref": "#/entities/SyncPreferences"
+      },
+      "description": "Synced app preferences for the authenticated user (docId = preferences)."
+    },
+    "/sync_events/{eventId}": {
+      "schema": {
+        "$ref": "#/entities/SyncEvent"
+      },
+      "description": "Immutable sync activity records queried by admins for Firebase statistics."
+    }
+  }
+}
