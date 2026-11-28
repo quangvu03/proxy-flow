@@ -103,11 +103,13 @@ public final class FirestoreErrorHelper {
         Throwable cursor = exception;
         Throwable firstNonCancel = null;
         int depth = 0;
-        while (cursor != null && depth++ < 12) {
+        while (cursor != null && depth++ < 16) {
             if (cursor instanceof FirebaseFirestoreException) {
                 return cursor;
             }
-            if (firstNonCancel == null && !(cursor instanceof CancellationException)) {
+            if (firstNonCancel == null
+                    && !(cursor instanceof CancellationException)
+                    && !(cursor instanceof java.util.concurrent.ExecutionException)) {
                 firstNonCancel = cursor;
             }
             cursor = cursor.getCause();
@@ -115,24 +117,74 @@ public final class FirestoreErrorHelper {
         return firstNonCancel != null ? firstNonCancel : exception;
     }
 
+    public static boolean isTransientRetryable(@Nullable Throwable exception) {
+        if (exception == null) {
+            return false;
+        }
+        Throwable root = unwrapRootCause(exception);
+        if (root instanceof FirebaseFirestoreException) {
+            FirebaseFirestoreException.Code code = ((FirebaseFirestoreException) root).getCode();
+            return code == FirebaseFirestoreException.Code.UNAVAILABLE
+                    || code == FirebaseFirestoreException.Code.DEADLINE_EXCEEDED
+                    || code == FirebaseFirestoreException.Code.ABORTED;
+        }
+        Throwable cursor = exception;
+        int depth = 0;
+        while (cursor != null && depth++ < 12) {
+            if (cursor instanceof java.util.concurrent.TimeoutException
+                    || cursor instanceof java.io.IOException) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
+    }
+
     @NonNull
     public static String getFriendlyErrorMessage(@NonNull Context context, @NonNull Throwable exception) {
         Throwable root = unwrapRootCause(exception);
         if (root instanceof FirebaseFirestoreException) {
             FirebaseFirestoreException ffe = (FirebaseFirestoreException) root;
-            if (ffe.getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+            FirebaseFirestoreException.Code code = ffe.getCode();
+            if (code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
                 return context.getString(R.string.msg_firestore_permission_denied);
             }
-            if (ffe.getCode() == FirebaseFirestoreException.Code.UNAVAILABLE) {
-                return context.getString(R.string.msg_firestore_unavailable);
+            if (code == FirebaseFirestoreException.Code.DEADLINE_EXCEEDED) {
+                return context.getString(R.string.msg_firestore_timeout);
             }
-            if (ffe.getCode() == FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED) {
+            if (code == FirebaseFirestoreException.Code.UNAVAILABLE) {
+                String base = context.getString(R.string.msg_firestore_unavailable);
+                String detail = extractDiagnosticDetail(ffe);
+                return detail.isEmpty() ? base : (base + " (" + detail + ")");
+            }
+            if (code == FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED) {
                 return context.getString(R.string.msg_firestore_quota_exceeded);
             }
+            if (code == FirebaseFirestoreException.Code.UNAUTHENTICATED
+                    || code == FirebaseFirestoreException.Code.NOT_FOUND
+                    || code == FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                String detail = extractDiagnosticDetail(ffe);
+                return detail.isEmpty() ? code.name() : (code.name() + ": " + detail);
+            }
+        }
+        if (root instanceof java.util.concurrent.TimeoutException) {
+            return context.getString(R.string.msg_firestore_timeout);
         }
         String raw = root.getLocalizedMessage();
         return raw != null && !raw.trim().isEmpty()
                 ? raw.trim()
                 : context.getString(R.string.msg_firestore_generic_error);
+    }
+
+    @NonNull
+    private static String extractDiagnosticDetail(@NonNull FirebaseFirestoreException ffe) {
+        Throwable cause = ffe.getCause();
+        String causeMsg = cause != null && cause.getMessage() != null ? cause.getMessage().trim() : "";
+        String msg = ffe.getMessage() != null ? ffe.getMessage().trim() : "";
+        String candidate = !causeMsg.isEmpty() ? causeMsg : msg;
+        if (candidate.isEmpty()) {
+            candidate = ffe.getCode().name();
+        }
+        return candidate.length() > 120 ? candidate.substring(0, 120) : candidate;
     }
 }

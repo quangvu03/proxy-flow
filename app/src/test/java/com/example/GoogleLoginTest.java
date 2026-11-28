@@ -23,11 +23,17 @@ import com.example.ui.SettingsUiHelper;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 
+import com.example.auth.AdminConfig;
+
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
+
+import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * Robolectric tests verifying top-bar Login action (replacing Settings),
@@ -35,6 +41,11 @@ import org.robolectric.Shadows;
  */
 @RunWith(RobolectricTestRunner.class)
 public class GoogleLoginTest {
+
+    @After
+    public void tearDown() {
+        AdminConfig.clearCache();
+    }
 
     @Test
     public void googleServicesWebClientId_isGeneratedFromGoogleServicesJson() {
@@ -132,18 +143,45 @@ public class GoogleLoginTest {
     }
 
     @Test
-    public void adminConfig_matchesExactAdminUidsOnly() {
-        assertTrue(com.example.auth.AdminConfig.isAdminUid("xuonHbFXXrPQEJVZPjyJy9itC7x1"));
-        assertTrue(com.example.auth.AdminConfig.isAdminUid("jACOpeQtRie82vw5S20AUWfZxD53"));
-        assertTrue(com.example.auth.AdminConfig.isAdmin("new_uid", "resetall1st@gmail.com", true));
-        assertFalse(com.example.auth.AdminConfig.isAdmin("new_uid", "resetall1st@gmail.com", false));
-        assertFalse(com.example.auth.AdminConfig.isAdminUid("regular_user_123"));
-        assertFalse(com.example.auth.AdminConfig.isAdminUid(""));
-        assertFalse(com.example.auth.AdminConfig.isAdminUid(null));
+    public void adminConfig_requiresDynamicFirestoreRbacRoleWithZeroHardcodedAccounts() {
+        AdminConfig.clearCache();
+        assertFalse(AdminConfig.getCachedAccess("any_arbitrary_uid").canAccessAdminDashboard());
+        assertFalse(AdminConfig.getCachedAccess("").canAccessAdminDashboard());
+        assertFalse(AdminConfig.getCachedAccess(null).canAccessAdminDashboard());
+
+        AdminConfig.seedAccessForTesting(
+                "uid_rbac_admin",
+                AdminConfig.ROLE_ADMIN,
+                Collections.singletonList(AdminConfig.PERM_ADMIN_DASHBOARD_VIEW)
+        );
+        assertTrue(AdminConfig.getCachedAccess("uid_rbac_admin").canAccessAdminDashboard());
+
+        AdminConfig.seedAccessForTesting(
+                "uid_rbac_mod",
+                AdminConfig.ROLE_MODERATOR,
+                Arrays.asList(
+                        AdminConfig.PERM_ADMIN_DASHBOARD_VIEW,
+                        AdminConfig.PERM_ADMIN_USERS_LIST
+                )
+        );
+        assertTrue(AdminConfig.getCachedAccess("uid_rbac_mod").canAccessAdminDashboard());
+        assertFalse(AdminConfig.getCachedAccess("uid_rbac_mod").isAdmin());
+
+        AdminConfig.seedAccessForTesting("uid_rbac_viewer", AdminConfig.ROLE_USER, Collections.emptyList());
+        assertFalse(AdminConfig.getCachedAccess("uid_rbac_viewer").canAccessAdminDashboard());
+
+        AdminConfig.seedAccessForTesting(
+                "uid_rbac_inactive_admin",
+                AdminConfig.ROLE_ADMIN,
+                false,
+                Collections.singletonList(AdminConfig.PERM_ADMIN_DASHBOARD_VIEW)
+        );
+        assertFalse(AdminConfig.getCachedAccess("uid_rbac_inactive_admin").isAdmin());
+        assertFalse(AdminConfig.getCachedAccess("uid_rbac_inactive_admin").canAccessAdminDashboard());
     }
 
     @Test
-    public void googleLoginActivity_regularUserShowsSyncAndHidesAdmin_adminShowsBothAndOpensAdmin() {
+    public void googleLoginActivity_regularUserShowsSyncAndHidesAdmin_rbacGrantedRoleShowsBoth() {
         GoogleLoginActivity activity = Robolectric.buildActivity(GoogleLoginActivity.class)
                 .setup()
                 .get();
@@ -157,30 +195,53 @@ public class GoogleLoginTest {
         assertNotNull(badgeAdmin);
         assertNotNull(tvUid);
 
-        // Regular user
+        // Regular user without RBAC admin role
         activity.renderSignedInAccountForUi("regular_uid_001", "Alice", "alice@example.com", true, 0L);
         assertEquals(View.VISIBLE, btnSync.getVisibility());
         assertEquals(View.GONE, btnAdmin.getVisibility());
         assertEquals(View.GONE, badgeAdmin.getVisibility());
         assertTrue(tvUid.getText().toString().contains("regular_uid_001"));
 
-        // First Admin UID
-        activity.renderSignedInAccountForUi("xuonHbFXXrPQEJVZPjyJy9itC7x1", "Admin One", "admin1@example.com", true, 1700000000000L);
+        // Account granted RBAC 'admin' role in Firestore
+        AdminConfig.seedAccessForTesting(
+                "rbac_uid_admin",
+                AdminConfig.ROLE_ADMIN,
+                Collections.singletonList(AdminConfig.PERM_ADMIN_DASHBOARD_VIEW)
+        );
+        activity.renderSignedInAccountForUi("rbac_uid_admin", "Admin One", "admin1@example.com", true, 1700000000000L);
         assertEquals(View.VISIBLE, btnSync.getVisibility());
         assertEquals(View.VISIBLE, btnAdmin.getVisibility());
         assertEquals(View.VISIBLE, badgeAdmin.getVisibility());
 
-        // Second Admin UID
-        activity.renderSignedInAccountForUi("jACOpeQtRie82vw5S20AUWfZxD53", "Admin Two", "admin2@example.com", true, 1700000000000L);
+        // Account with role == 'admin' but active == false MUST be denied
+        AdminConfig.seedAccessForTesting(
+                "rbac_uid_inactive_admin",
+                AdminConfig.ROLE_ADMIN,
+                false,
+                Collections.singletonList(AdminConfig.PERM_ADMIN_DASHBOARD_VIEW)
+        );
+        activity.renderSignedInAccountForUi("rbac_uid_inactive_admin", "Suspended Admin", "suspended@example.com", true, 1700000000000L);
+        assertEquals(View.VISIBLE, btnSync.getVisibility());
+        assertEquals(View.GONE, btnAdmin.getVisibility());
+        assertEquals(View.GONE, badgeAdmin.getVisibility());
+
+        // Account granted RBAC 'moderator' role with admin.dashboard.view permission
+        AdminConfig.seedAccessForTesting(
+                "rbac_uid_mod",
+                AdminConfig.ROLE_MODERATOR,
+                Arrays.asList(AdminConfig.PERM_ADMIN_DASHBOARD_VIEW, AdminConfig.PERM_ADMIN_USERS_LIST)
+        );
+        activity.renderSignedInAccountForUi("rbac_uid_mod", "Mod Two", "mod2@example.com", true, 1700000000000L);
         assertEquals(View.VISIBLE, btnSync.getVisibility());
         assertEquals(View.VISIBLE, btnAdmin.getVisibility());
         assertEquals(View.VISIBLE, badgeAdmin.getVisibility());
 
-        // Verified owner email with project-scoped UID
-        activity.renderSignedInAccountForUi("new_project_uid_001", "Owner", "resetall1st@gmail.com", true, 1700000000000L);
+        // Revoking RBAC role hides admin controls immediately
+        AdminConfig.clearCache();
+        activity.renderSignedInAccountForUi("rbac_uid_admin", "Admin One", "admin1@example.com", true, 1700000000000L);
         assertEquals(View.VISIBLE, btnSync.getVisibility());
-        assertEquals(View.VISIBLE, btnAdmin.getVisibility());
-        assertEquals(View.VISIBLE, badgeAdmin.getVisibility());
+        assertEquals(View.GONE, btnAdmin.getVisibility());
+        assertEquals(View.GONE, badgeAdmin.getVisibility());
     }
 
     @Test
@@ -188,7 +249,7 @@ public class GoogleLoginTest {
         long now = 1_750_000_000_000L;
         java.util.List<com.example.data.AdminStatsRepository.UserStatsItem> users = java.util.Arrays.asList(
                 new com.example.data.AdminStatsRepository.UserStatsItem(
-                        "xuonHbFXXrPQEJVZPjyJy9itC7x1", "Admin", "a@b.com", 5, 4, 3, true, true, "Pixel 8", "3.6", now - 3600_000L, true),
+                        "rbac_admin_1", "Admin", "a@b.com", 5, 4, 3, true, true, "Pixel 8", "3.6", now - 3600_000L, true),
                 new com.example.data.AdminStatsRepository.UserStatsItem(
                         "user_2", "User 2", "u2@b.com", 2, 1, 1, false, false, "Galaxy S24", "3.6", now - 100_000_000L, false)
         );
@@ -276,5 +337,159 @@ public class GoogleLoginTest {
         assertNotNull(signedInIntent);
         assertNotNull(signedInIntent.getComponent());
         assertEquals(GoogleLoginActivity.class.getName(), signedInIntent.getComponent().getClassName());
+    }
+
+    @Test
+    public void cloudSyncManager_initializesNamedFirestoreInstanceCleanly() {
+        Context context = ApplicationProvider.getApplicationContext();
+        com.google.firebase.firestore.FirebaseFirestore db =
+                com.example.data.CloudSyncManager.getFirestore(context);
+        assertNotNull(
+                "Named Firestore instance should initialize cleanly: "
+                        + com.example.data.CloudSyncManager.getLastFirestoreInitError(),
+                db
+        );
+        assertEquals("", com.example.data.CloudSyncManager.getLastFirestoreInitError());
+    }
+
+    @Test
+    public void firestoreErrorHelper_classifiesRetryableAndSurfacesUnavailableDiagnostics() {
+        Context context = ApplicationProvider.getApplicationContext();
+
+        com.google.firebase.firestore.FirebaseFirestoreException offlineEx =
+                new com.google.firebase.firestore.FirebaseFirestoreException(
+                        "Failed to get document because the client is offline.",
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+                );
+        assertTrue(com.example.data.FirestoreErrorHelper.isTransientRetryable(
+                new java.util.concurrent.ExecutionException(offlineEx)
+        ));
+        String unavailableMsg = com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(context, offlineEx);
+        assertTrue(unavailableMsg.contains(context.getString(R.string.msg_firestore_unavailable)));
+        assertTrue(unavailableMsg.contains("client is offline"));
+
+        assertTrue(com.example.data.FirestoreErrorHelper.isTransientRetryable(
+                new java.util.concurrent.TimeoutException("Timed out")
+        ));
+        assertEquals(
+                context.getString(R.string.msg_firestore_timeout),
+                com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(
+                        context, new java.util.concurrent.TimeoutException("Timed out")
+                )
+        );
+
+        com.google.firebase.firestore.FirebaseFirestoreException genericUnavailableEx =
+                new com.google.firebase.firestore.FirebaseFirestoreException(
+                        "The service is currently unavailable.",
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+                );
+        String genericUnavailableMsg = com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(
+                context, genericUnavailableEx
+        );
+        assertTrue(genericUnavailableMsg.contains(context.getString(R.string.msg_firestore_unavailable)));
+        assertTrue(genericUnavailableMsg.contains("service is currently unavailable"));
+
+        com.google.firebase.firestore.FirebaseFirestoreException unauthEx =
+                new com.google.firebase.firestore.FirebaseFirestoreException(
+                        "HTTP 401: Invalid auth token",
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAUTHENTICATED
+                );
+        assertTrue(com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(context, unauthEx)
+                .contains("UNAUTHENTICATED"));
+
+        com.google.firebase.firestore.FirebaseFirestoreException notFoundEx =
+                new com.google.firebase.firestore.FirebaseFirestoreException(
+                        "Database not found",
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.NOT_FOUND
+                );
+        assertTrue(com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(context, notFoundEx)
+                .contains("NOT_FOUND"));
+
+        com.google.firebase.firestore.FirebaseFirestoreException permEx =
+                new com.google.firebase.firestore.FirebaseFirestoreException(
+                        "Missing or insufficient permissions.",
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
+                );
+        assertFalse(com.example.data.FirestoreErrorHelper.isTransientRetryable(permEx));
+        assertEquals(
+                context.getString(R.string.msg_firestore_permission_denied),
+                com.example.data.FirestoreErrorHelper.getFriendlyErrorMessage(context, permEx)
+        );
+    }
+
+    @Test
+    public void firestoreRestClient_buildsCommitPayloadsAndDecodesDocumentsCorrectly() throws Exception {
+        java.util.Map<String, Object> createFields = new java.util.HashMap<>();
+        createFields.put("userId", "uid_123");
+        createFields.put("syncCount", 1);
+        createFields.put("createdAt", com.google.firebase.firestore.FieldValue.serverTimestamp());
+
+        org.json.JSONObject createPayload = com.example.data.FirestoreRestClient.buildCommitPayload(
+                "projects/p/databases/d/documents/users/uid_123",
+                Boolean.FALSE,
+                createFields,
+                Arrays.asList("createdAt", "updatedAt", "lastSyncAt")
+        );
+        org.json.JSONObject createWrite = createPayload.getJSONArray("writes").getJSONObject(0);
+        assertFalse(createWrite.getJSONObject("currentDocument").getBoolean("exists"));
+        assertFalse(createWrite.has("updateMask"));
+        assertEquals(3, createWrite.getJSONArray("updateTransforms").length());
+        assertEquals(
+                "REQUEST_TIME",
+                createWrite.getJSONArray("updateTransforms").getJSONObject(0).getString("setToServerValue")
+        );
+        assertFalse(createWrite.getJSONObject("update").getJSONObject("fields").has("createdAt"));
+
+        java.util.Map<String, Object> updateFields = new java.util.HashMap<>();
+        updateFields.put("syncCount", 4);
+        updateFields.put("firewallEnabled", true);
+        updateFields.put("updatedAt", com.google.firebase.firestore.FieldValue.serverTimestamp());
+
+        org.json.JSONObject updatePayload = com.example.data.FirestoreRestClient.buildCommitPayload(
+                "projects/p/databases/d/documents/users/uid_123",
+                Boolean.TRUE,
+                updateFields,
+                Arrays.asList("updatedAt", "lastSyncAt")
+        );
+        org.json.JSONObject updateWrite = updatePayload.getJSONArray("writes").getJSONObject(0);
+        assertTrue(updateWrite.getJSONObject("currentDocument").getBoolean("exists"));
+        assertTrue(updateWrite.has("updateMask"));
+        org.json.JSONArray maskPaths = updateWrite.getJSONObject("updateMask").getJSONArray("fieldPaths");
+        assertEquals(2, maskPaths.length());
+
+        java.util.Map<String, Object> mergeFields = new java.util.HashMap<>();
+        mergeFields.put("ads_enabled", false);
+        mergeFields.put("updatedBy", "uid_admin");
+        org.json.JSONObject mergePayload = com.example.data.FirestoreRestClient.buildCommitPayload(
+                "projects/p/databases/d/documents/app_config/ads",
+                null,
+                mergeFields,
+                Collections.singletonList("updatedAt")
+        );
+        org.json.JSONObject mergeWrite = mergePayload.getJSONArray("writes").getJSONObject(0);
+        assertFalse(mergeWrite.has("currentDocument"));
+        assertTrue(mergeWrite.has("updateMask"));
+        assertEquals(1, mergeWrite.getJSONArray("updateTransforms").length());
+
+        String sampleDocJson = "{"
+                + "\"name\":\"projects/p/databases/d/documents/roles/admin_uid_1\","
+                + "\"fields\":{"
+                + "  \"role\":{\"stringValue\":\"admin\"},"
+                + "  \"active\":{\"booleanValue\":true},"
+                + "  \"syncCount\":{\"integerValue\":\"7\"},"
+                + "  \"updatedAt\":{\"timestampValue\":\"2026-11-28T09:15:30.123456Z\"},"
+                + "  \"permissions\":{\"arrayValue\":{\"values\":[{\"stringValue\":\"admin.dashboard.view\"}]}}"
+                + "}"
+                + "}";
+        com.example.data.FirestoreRestClient.RestDocument parsedDoc =
+                com.example.data.FirestoreRestClient.parseDocumentJson(new org.json.JSONObject(sampleDocJson), "");
+        assertTrue(parsedDoc.exists());
+        assertEquals("admin_uid_1", parsedDoc.getId());
+        assertEquals(7, parsedDoc.getInt("syncCount"));
+        assertTrue(parsedDoc.getTimestampMs("updatedAt") > 0L);
+
+        AdminConfig.RbacAccess rbac = AdminConfig.RbacAccess.fromRestDocument("admin_uid_1", parsedDoc);
+        assertTrue(rbac.isAdmin());
+        assertTrue(rbac.canAccessAdminDashboard());
     }
 }

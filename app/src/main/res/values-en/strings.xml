@@ -537,6 +537,8 @@
 
     <string name="msg_firestore_permission_denied">Permission denied by Firebase security rules</string>
     <string name="msg_firestore_unavailable">Firebase service unavailable, please try again</string>
+    <string name="msg_firestore_timeout">Connection to Firebase timed out, please try again</string>
+    <string name="msg_sync_no_network">No internet connection. Please check Wi-Fi or mobile data and try again</string>
     <string name="msg_firestore_quota_exceeded">Daily Firebase quota exceeded</string>
     <string name="msg_firestore_generic_error">Firebase data error</string>
 
@@ -568,4 +570,17 @@
     <string name="label_account_uid">UID: %1$s</string>
     <string name="action_copy_uid">Copy UID</string>
     <string name="msg_uid_copied">Copied UID: %1$s</string>
+
+    <!-- Admin AdMob Control -->
+    <string name="admin_ads_title">Ads Control (AdMob)</string>
+    <string name="admin_ads_desc">Enable or disable Banner and App Open Ads across the entire app via Firestore (/app_config/ads). Only active admins can modify this setting.</string>
+    <string name="admin_ads_switch_label">Show ads in application</string>
+    <string name="admin_ads_status_on">ENABLED</string>
+    <string name="admin_ads_status_off">DISABLED</string>
+    <string name="admin_ads_meta_on">Ads are currently visible to users (ads_enabled = true)</string>
+    <string name="admin_ads_meta_off">All in-app ads are disabled (ads_enabled = false)</string>
+    <string name="admin_ads_updating">Updating configuration on Firebase…</string>
+    <string name="msg_admin_ads_enabled">Enabled ads for the entire app</string>
+    <string name="msg_admin_ads_disabled">Disabled ads for the entire app</string>
+    <string name="msg_admin_ads_update_failed">Failed to update ads status: %1$s</string>
 </resources>

@@ -1,11 +1,13 @@
 package com.example.ui;
 
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -13,6 +15,7 @@ import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -21,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.example.R;
+import com.example.ads.AdsConfigManager;
 import com.example.auth.AdminConfig;
 import com.example.auth.GoogleAuthManager;
 import com.example.data.AdminStatsRepository;
@@ -28,6 +32,7 @@ import com.example.data.AdminStatsRepository.AdminDashboardData;
 import com.example.data.AdminStatsRepository.SyncEventItem;
 import com.example.data.AdminStatsRepository.UserStatsItem;
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.firebase.auth.FirebaseUser;
 
 import java.text.DateFormat;
@@ -38,7 +43,7 @@ import java.util.Locale;
 
 /**
  * Pure Java Admin Dashboard displaying live user, proxy, and sync statistics
- * retrieved from Firebase Firestore. Restricted to designated Admin UIDs.
+ * retrieved from Firebase Firestore. Authorized dynamically via Firestore RBAC (/roles/{uid}).
  */
 public class AdminDashboardActivity extends AppCompatActivity {
 
@@ -60,6 +65,11 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private TextView tvPrivateRoutingUsers;
     private TextView tvPrivateRoutingSub;
 
+    private TextView tvAdsStatusBadge;
+    private TextView tvAdsMeta;
+    private ProgressBar progressAds;
+    private MaterialSwitch switchAdminAds;
+
     private TextView tvUsersSectionTitle;
     private TextView tvUsersEmpty;
     private TextView tvEventsSectionTitle;
@@ -69,6 +79,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private final AdminSyncEventsAdapter eventsAdapter = new AdminSyncEventsAdapter();
 
     private boolean isLoading = false;
+    private boolean isUpdatingAds = false;
+    private boolean suppressAdsSwitchCallback = false;
+
+    private final AdsConfigManager.AdsConfigListener adsConfigListener = enabled -> {
+        if (!isFinishing() && !isDestroyed() && !isUpdatingAds) {
+            renderAdsControlUi(enabled, false);
+        }
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -76,7 +94,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(this);
-        if (!AdminConfig.isAdmin(currentUser)) {
+        if (currentUser == null || TextUtils.isEmpty(currentUser.getUid())) {
             Toast.makeText(this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
             finish();
             return;
@@ -114,6 +132,19 @@ public class AdminDashboardActivity extends AppCompatActivity {
         tvPrivateRoutingUsers = findViewById(R.id.tv_admin_private_routing_users);
         tvPrivateRoutingSub = findViewById(R.id.tv_admin_private_routing_sub);
 
+        tvAdsStatusBadge = findViewById(R.id.tv_admin_ads_status_badge);
+        tvAdsMeta = findViewById(R.id.tv_admin_ads_meta);
+        progressAds = findViewById(R.id.progress_admin_ads);
+        switchAdminAds = findViewById(R.id.switch_admin_ads);
+
+        renderAdsControlUi(AdsConfigManager.getInstance(this).isAdsEnabled(), false);
+        switchAdminAds.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (suppressAdsSwitchCallback) {
+                return;
+            }
+            onAdminToggledAds(isChecked);
+        });
+
         tvUsersSectionTitle = findViewById(R.id.tv_admin_users_section_title);
         tvUsersEmpty = findViewById(R.id.tv_admin_users_empty);
         tvEventsSectionTitle = findViewById(R.id.tv_admin_events_section_title);
@@ -137,13 +168,30 @@ public class AdminDashboardActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        if (!AdminConfig.isAdmin(GoogleAuthManager.getCurrentUser(this))) {
+        FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(this);
+        if (currentUser == null || TextUtils.isEmpty(currentUser.getUid())) {
             finish();
+            return;
         }
+        AdsConfigManager adsConfig = AdsConfigManager.getInstance(this);
+        adsConfig.startListening();
+        adsConfig.addListener(adsConfigListener);
+    }
+
+    @Override
+    protected void onStop() {
+        AdsConfigManager.getInstance(this).removeListener(adsConfigListener);
+        super.onStop();
     }
 
     private void loadStats() {
         if (isLoading) {
+            return;
+        }
+        FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(this);
+        if (currentUser == null || TextUtils.isEmpty(currentUser.getUid())) {
+            Toast.makeText(this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
+            finish();
             return;
         }
         isLoading = true;
@@ -170,13 +218,97 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 isLoading = false;
                 progressStats.setVisibility(View.INVISIBLE);
                 swipeRefresh.setRefreshing(false);
+                if (getString(R.string.msg_admin_access_denied).equals(message)) {
+                    Toast.makeText(AdminDashboardActivity.this, message, Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
                 tvError.setText(message);
                 cardError.setVisibility(View.VISIBLE);
             }
         });
     }
 
+    private void onAdminToggledAds(boolean targetEnabled) {
+        if (isUpdatingAds) {
+            return;
+        }
+        FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(this);
+        if (currentUser == null || TextUtils.isEmpty(currentUser.getUid())) {
+            renderAdsControlUi(!targetEnabled, false);
+            Toast.makeText(this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        isUpdatingAds = true;
+        renderAdsControlUi(targetEnabled, true);
+        AdsConfigManager.getInstance(this).setAdsEnabled(this, targetEnabled, new AdsConfigManager.UpdateCallback() {
+            @Override
+            public void onSuccess(boolean adsEnabled) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                isUpdatingAds = false;
+                renderAdsControlUi(adsEnabled, false);
+                Toast.makeText(
+                        AdminDashboardActivity.this,
+                        adsEnabled ? R.string.msg_admin_ads_enabled : R.string.msg_admin_ads_disabled,
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                isUpdatingAds = false;
+                boolean actualState = AdsConfigManager.getInstance(AdminDashboardActivity.this).isAdsEnabled();
+                renderAdsControlUi(actualState, false);
+                if (getString(R.string.msg_admin_access_denied).equals(message)) {
+                    Toast.makeText(AdminDashboardActivity.this, message, Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
+                Toast.makeText(
+                        AdminDashboardActivity.this,
+                        getString(R.string.msg_admin_ads_update_failed, message),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
+    }
+
+    private void renderAdsControlUi(boolean adsEnabled, boolean saving) {
+        if (switchAdminAds != null) {
+            suppressAdsSwitchCallback = true;
+            switchAdminAds.setChecked(adsEnabled);
+            switchAdminAds.setEnabled(!saving);
+            suppressAdsSwitchCallback = false;
+        }
+        if (progressAds != null) {
+            progressAds.setVisibility(saving ? View.VISIBLE : View.GONE);
+        }
+        if (tvAdsStatusBadge != null) {
+            tvAdsStatusBadge.setText(adsEnabled ? R.string.admin_ads_status_on : R.string.admin_ads_status_off);
+            int fg = ContextCompat.getColor(this, adsEnabled ? R.color.status_connected : R.color.status_error);
+            int bg = ContextCompat.getColor(this, adsEnabled ? R.color.status_connected_bg : R.color.status_error_bg);
+            tvAdsStatusBadge.setTextColor(fg);
+            tvAdsStatusBadge.setBackgroundTintList(ColorStateList.valueOf(bg));
+        }
+        if (tvAdsMeta != null) {
+            if (saving) {
+                tvAdsMeta.setText(R.string.admin_ads_updating);
+            } else {
+                tvAdsMeta.setText(adsEnabled ? R.string.admin_ads_meta_on : R.string.admin_ads_meta_off);
+            }
+        }
+    }
+
     private void bindDashboardData(@NonNull AdminDashboardData data) {
+        renderAdsControlUi(data.isAdsEnabled(), isUpdatingAds);
+
         String timeStr = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault())
                 .format(new Date(data.getFetchedAtMs()));
         tvUpdatedAt.setText(getString(R.string.admin_hero_updated_at, timeStr));

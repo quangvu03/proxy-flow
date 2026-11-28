@@ -36,7 +36,7 @@ import java.util.Locale;
 /**
  * Pure Java dedicated screen allowing sign-in exclusively via Google Account
  * (Jetpack Credential Manager + Firebase Auth), cross-device cloud sync,
- * and Admin Dashboard access for authorized Admin UIDs.
+ * and Admin Dashboard access authorized via Firestore RBAC (/roles/{uid}).
  */
 public class GoogleLoginActivity extends AppCompatActivity {
 
@@ -228,11 +228,42 @@ public class GoogleLoginActivity extends AppCompatActivity {
 
     private void openAdminDashboard() {
         FirebaseUser current = GoogleAuthManager.getCurrentUser(this);
-        if (!AdminConfig.isAdmin(current)) {
+        if (current == null || TextUtils.isEmpty(current.getUid())) {
             Toast.makeText(this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
             return;
         }
-        startActivity(new Intent(this, AdminDashboardActivity.class));
+        if (isLoading) {
+            return;
+        }
+        String uid = current.getUid().trim();
+        setLoading(true);
+        AdminConfig.fetchAccessForUser(this, uid, new AdminConfig.RbacCallback() {
+            @Override
+            public void onResolved(@NonNull AdminConfig.RbacAccess access) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                setLoading(false);
+                if (!uid.equals(currentUid)) {
+                    return;
+                }
+                applyRbacUi(access.canAccessAdminDashboard());
+                if (!access.canAccessAdminDashboard()) {
+                    Toast.makeText(GoogleLoginActivity.this, R.string.msg_admin_access_denied, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                startActivity(new Intent(GoogleLoginActivity.this, AdminDashboardActivity.class));
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                setLoading(false);
+                showError(message);
+            }
+        });
     }
 
     private void performSignOut() {
@@ -254,6 +285,8 @@ public class GoogleLoginActivity extends AppCompatActivity {
     private void renderUser(@Nullable FirebaseUser user) {
         if (user == null) {
             currentUid = null;
+            AdminConfig.clearCache();
+            applyRbacUi(false);
             cardSignIn.setVisibility(View.VISIBLE);
             cardAccount.setVisibility(View.GONE);
             return;
@@ -265,6 +298,7 @@ public class GoogleLoginActivity extends AppCompatActivity {
         long lastSyncMs = CloudSyncManager.getLastSyncTimestampMs(this, user.getUid());
 
         renderSignedInAccountForUi(user.getUid(), displayName, email, user.isEmailVerified(), lastSyncMs);
+        refreshRbacAccessAsync(user.getUid());
     }
 
     @VisibleForTesting
@@ -307,11 +341,38 @@ public class GoogleLoginActivity extends AppCompatActivity {
             tvUid.setText(getString(R.string.label_account_uid, safeUid));
         }
 
-        boolean isAdmin = AdminConfig.isAdmin(safeUid, safeEmail, emailVerified);
-        badgeAdminAccount.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
-        btnOpenAdmin.setVisibility(isAdmin ? View.VISIBLE : View.GONE);
+        boolean hasAdminAccess = !TextUtils.isEmpty(safeUid)
+                && AdminConfig.getCachedAccess(safeUid).canAccessAdminDashboard();
+        applyRbacUi(hasAdminAccess);
         btnSyncDevices.setVisibility(View.VISIBLE);
         updateSyncStatusText(lastSyncMs);
+    }
+
+    private void refreshRbacAccessAsync(@Nullable String uid) {
+        if (TextUtils.isEmpty(uid)) {
+            applyRbacUi(false);
+            return;
+        }
+        final String targetUid = uid.trim();
+        AdminConfig.fetchAccessForUser(this, targetUid, new AdminConfig.RbacCallback() {
+            @Override
+            public void onResolved(@NonNull AdminConfig.RbacAccess access) {
+                if (isFinishing() || isDestroyed() || !targetUid.equals(currentUid)) {
+                    return;
+                }
+                applyRbacUi(access.canAccessAdminDashboard());
+            }
+
+            @Override
+            public void onError(@NonNull String message) {
+                // Keep cached UI state quietly on transient offline errors
+            }
+        });
+    }
+
+    private void applyRbacUi(boolean hasAdminAccess) {
+        badgeAdminAccount.setVisibility(hasAdminAccess ? View.VISIBLE : View.GONE);
+        btnOpenAdmin.setVisibility(hasAdminAccess ? View.VISIBLE : View.GONE);
     }
 
     private void copyCurrentUid() {

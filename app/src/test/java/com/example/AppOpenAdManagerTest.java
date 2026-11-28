@@ -9,8 +9,10 @@ import android.os.Looper;
 
 import androidx.test.core.app.ApplicationProvider;
 
+import com.example.ads.AdsConfigManager;
 import com.example.ads.AppOpenAdManager;
 
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -19,13 +21,20 @@ import org.robolectric.Shadows;
 import org.robolectric.android.controller.ActivityController;
 
 /**
- * Verifies AdMob App Open Ad configuration and open-count gating:
+ * Verifies AdMob App Open Ad configuration, open-count gating, and AdsConfigManager toggle gating:
  * - Open #1: no ad
  * - Open #2: no ad
- * - Open #3+: always show ad
+ * - Open #3+: always show ad (when ads_enabled == true)
  */
 @RunWith(RobolectricTestRunner.class)
 public class AppOpenAdManagerTest {
+
+    @After
+    public void tearDown() {
+        Context context = ApplicationProvider.getApplicationContext();
+        AppOpenAdManager.getInstance(context).resetStateForTesting();
+        AdsConfigManager.getInstance(context).resetForTesting();
+    }
 
     @Test
     public void appOpenAdUnitId_matchesRequestedUnitId() {
@@ -56,6 +65,7 @@ public class AppOpenAdManagerTest {
     @Test
     public void lifecycleTransitions_countForegroundOpensAndRespectExternalSuppression() {
         Context context = ApplicationProvider.getApplicationContext();
+        AdsConfigManager.getInstance(context).setAdsEnabledForTesting(true);
         AppOpenAdManager manager = AppOpenAdManager.getInstance(context);
         manager.resetStateForTesting();
 
@@ -99,6 +109,7 @@ public class AppOpenAdManagerTest {
     @Test
     public void translucentDialogPauseResume_clearsStaleSuppressionForNextRealOpen() {
         Context context = ApplicationProvider.getApplicationContext();
+        AdsConfigManager.getInstance(context).setAdsEnabledForTesting(true);
         AppOpenAdManager manager = AppOpenAdManager.getInstance(context);
         manager.resetStateForTesting();
 
@@ -120,6 +131,28 @@ public class AppOpenAdManagerTest {
             controller.restart().resume();
             Shadows.shadowOf(Looper.getMainLooper()).idle();
             assertEquals(2, manager.getOpenCount());
+        }
+    }
+
+    @Test
+    public void adsDisabled_skipsForegroundOpenAdAndAvailability() {
+        Context context = ApplicationProvider.getApplicationContext();
+        AdsConfigManager adsConfig = AdsConfigManager.getInstance(context);
+        adsConfig.setAdsEnabledForTesting(false);
+        AppOpenAdManager manager = AppOpenAdManager.getInstance(context);
+        manager.resetStateForTesting();
+
+        try (ActivityController<MainActivity> controller =
+                     Robolectric.buildActivity(MainActivity.class).create().start().resume()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, manager.getOpenCount());
+            assertFalse(manager.isAdAvailable());
+
+            controller.pause().stop();
+            controller.restart().resume();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, manager.getOpenCount());
+            assertFalse(manager.isAdAvailable());
         }
     }
 }

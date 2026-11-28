@@ -1,6 +1,10 @@
 package com.example.data;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,16 +20,24 @@ import com.example.R;
 import com.example.auth.GoogleAuthManager;
 import com.example.model.ProxyConfig;
 import com.example.model.ProxyLogEntry;
+import com.google.android.gms.security.ProviderInstaller;
+import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.firestore.Source;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,17 +47,25 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 /**
  * Coordinates cross-device cloud sync of proxies, app settings, and user telemetry
- * against the provisioned named Firestore database.
+ * against the provisioned named Firestore database. Uses the Firestore SDK first and
+ * automatically falls back to HTTPS REST v1 when gRPC/HTTP2 is unavailable.
  */
 public final class CloudSyncManager {
 
     private static final String TAG = "CloudSyncManager";
     private static final String KEY_LAST_SYNC_PREFIX = "last_cloud_sync_at_";
+    private static final long TASK_TIMEOUT_SECONDS = 10L;
+    private static final int MAX_TRANSIENT_ATTEMPTS = 1;
     private static final ExecutorService SYNC_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ExecutorService PRESENCE_EXECUTOR = Executors.newSingleThreadExecutor();
     private static volatile Handler mainHandler;
+    private static volatile String lastFirestoreInitError = "";
 
     private static void postToMain(@NonNull Runnable runnable) {
         if (mainHandler == null) {
@@ -96,19 +116,31 @@ public final class CloudSyncManager {
     @Nullable
     public static FirebaseFirestore getFirestore(@NonNull Context context) {
         try {
-            Context appCtx = context.getApplicationContext();
-            if (GoogleAuthManager.getFirebaseAuth(appCtx) == null) {
+            Context appCtx = context.getApplicationContext() != null
+                    ? context.getApplicationContext()
+                    : context;
+            FirebaseApp app = GoogleAuthManager.ensureFirebaseApp(appCtx);
+            if (app == null) {
+                lastFirestoreInitError = "FirebaseApp not initialized";
                 return null;
             }
             String databaseId = appCtx.getString(R.string.firestore_database_id);
             if (TextUtils.isEmpty(databaseId)) {
+                lastFirestoreInitError = "Missing firestore_database_id";
                 return null;
             }
-            return FirebaseFirestore.getInstance(databaseId.trim());
-        } catch (Exception e) {
-            Log.w(TAG, "FirebaseFirestore unavailable: " + e.getMessage());
+            lastFirestoreInitError = "";
+            return FirebaseFirestore.getInstance(app, databaseId.trim());
+        } catch (Throwable e) {
+            lastFirestoreInitError = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            Log.w(TAG, "FirebaseFirestore unavailable: " + lastFirestoreInitError, e);
             return null;
         }
+    }
+
+    @NonNull
+    public static String getLastFirestoreInitError() {
+        return lastFirestoreInitError;
     }
 
     public static long getLastSyncTimestampMs(@NonNull Context context, @Nullable String uid) {
@@ -128,54 +160,105 @@ public final class CloudSyncManager {
      * Silently updates /users/{uid} summary metadata when a user signs in or opens the app.
      */
     public static void recordUserPresenceAsync(@NonNull Context context) {
-        Context appCtx = context.getApplicationContext();
+        Context appCtx = context.getApplicationContext() != null
+                ? context.getApplicationContext()
+                : context;
         FirebaseUser user = GoogleAuthManager.getCurrentUser(appCtx);
         if (user == null || TextUtils.isEmpty(user.getUid())) {
             return;
         }
-        FirebaseFirestore db = getFirestore(appCtx);
-        if (db == null) {
+        if (!hasActiveNetworkConnection(appCtx)) {
             return;
         }
-        SYNC_EXECUTOR.execute(() -> {
+        PRESENCE_EXECUTOR.execute(() -> {
             String uid = user.getUid();
             String userDocPath = "users/" + uid;
-            try {
-                DocumentReference userRef = db.collection("users").document(uid);
-                DocumentSnapshot existingDoc = Tasks.await(userRef.get());
-                List<ProxyConfig> localProxies = ProxyDatabaseHelper.getInstance(appCtx).getAllProxies();
-                SettingsPreferences prefs = new SettingsPreferences(appCtx);
+            FirebaseFirestore db = getFirestore(appCtx);
+            if (db != null) {
+                try {
+                    prepareFirestoreSession(appCtx, user, db);
+                    DocumentReference userRef = db.collection("users").document(uid);
+                    DocumentSnapshot existingDoc = awaitTask(userRef.get(Source.SERVER), TASK_TIMEOUT_SECONDS);
+                    List<ProxyConfig> localProxies = ProxyDatabaseHelper.getInstance(appCtx).getAllProxies();
+                    SettingsPreferences prefs = new SettingsPreferences(appCtx);
 
-                int existingSyncCount = 0;
-                if (existingDoc.exists()) {
-                    Object rawCount = existingDoc.get("syncCount");
-                    if (rawCount instanceof Number) {
-                        existingSyncCount = Math.max(0, ((Number) rawCount).intValue());
+                    int existingSyncCount = 0;
+                    if (existingDoc.exists()) {
+                        Object rawCount = existingDoc.get("syncCount");
+                        if (rawCount instanceof Number) {
+                            existingSyncCount = Math.max(0, ((Number) rawCount).intValue());
+                        }
                     }
-                }
 
-                Map<String, Object> summary = buildUserSummaryMap(
-                        appCtx,
-                        user,
-                        localProxies,
-                        prefs,
-                        existingSyncCount,
-                        !existingDoc.exists()
-                );
+                    Map<String, Object> summary = buildUserSummaryMap(
+                            appCtx,
+                            user,
+                            localProxies,
+                            prefs,
+                            existingSyncCount,
+                            !existingDoc.exists()
+                    );
 
-                if (existingDoc.exists()) {
-                    Tasks.await(userRef.update(summary));
-                } else {
-                    Tasks.await(userRef.set(summary));
+                    if (existingDoc.exists()) {
+                        awaitTask(userRef.update(summary), TASK_TIMEOUT_SECONDS);
+                    } else {
+                        awaitTask(userRef.set(summary), TASK_TIMEOUT_SECONDS);
+                    }
+                    return;
+                } catch (Exception e) {
+                    if (!FirestoreErrorHelper.isTransientRetryable(e)) {
+                        FirestoreErrorHelper.handleFirestoreError(
+                                e,
+                                FirestoreErrorHelper.OperationType.WRITE,
+                                userDocPath
+                        );
+                        return;
+                    }
+                    Log.w(TAG, "Presence SDK failed transiently, falling back to REST", e);
                 }
-            } catch (Exception e) {
+            }
+            try {
+                recordUserPresenceViaRest(appCtx, user);
+            } catch (Exception restErr) {
                 FirestoreErrorHelper.handleFirestoreError(
-                        e,
+                        restErr,
                         FirestoreErrorHelper.OperationType.WRITE,
                         userDocPath
                 );
             }
         });
+    }
+
+    private static void recordUserPresenceViaRest(
+            @NonNull Context appCtx,
+            @NonNull FirebaseUser user) throws Exception {
+        String uid = user.getUid();
+        String userDocPath = "users/" + uid;
+        FirestoreRestClient.RestDocument existingDoc = FirestoreRestClient.getDocument(appCtx, user, userDocPath);
+        List<ProxyConfig> localProxies = ProxyDatabaseHelper.getInstance(appCtx).getAllProxies();
+        SettingsPreferences prefs = new SettingsPreferences(appCtx);
+
+        int existingSyncCount = existingDoc.exists() ? existingDoc.getInt("syncCount") : 0;
+        boolean isCreate = !existingDoc.exists();
+        Map<String, Object> summary = buildUserSummaryMap(
+                appCtx,
+                user,
+                localProxies,
+                prefs,
+                existingSyncCount,
+                isCreate
+        );
+        List<String> tsFields = isCreate
+                ? Arrays.asList("createdAt", "updatedAt", "lastSyncAt")
+                : Arrays.asList("updatedAt", "lastSyncAt");
+        FirestoreRestClient.commitDocument(
+                appCtx,
+                user,
+                userDocPath,
+                isCreate ? Boolean.FALSE : Boolean.TRUE,
+                summary,
+                tsFields
+        );
     }
 
     /**
@@ -186,16 +269,17 @@ public final class CloudSyncManager {
      * 4. Updates users/{uid} summary and writes an immutable sync_events telemetry record
      */
     public static void syncAcrossDevices(@NonNull Context context, @NonNull SyncCallback callback) {
-        Context appCtx = context.getApplicationContext();
+        Context appCtx = context.getApplicationContext() != null
+                ? context.getApplicationContext()
+                : context;
         FirebaseUser user = GoogleAuthManager.getCurrentUser(appCtx);
         if (user == null || TextUtils.isEmpty(user.getUid())) {
             postToMain(() -> callback.onError(appCtx.getString(R.string.msg_sync_requires_login)));
             return;
         }
 
-        FirebaseFirestore db = getFirestore(appCtx);
-        if (db == null) {
-            postToMain(() -> callback.onError(appCtx.getString(R.string.msg_firestore_unavailable)));
+        if (!hasActiveNetworkConnection(appCtx)) {
+            postToMain(() -> callback.onError(appCtx.getString(R.string.msg_sync_no_network)));
             return;
         }
 
@@ -204,152 +288,473 @@ public final class CloudSyncManager {
             String currentPath = "users/" + uid;
             FirestoreErrorHelper.OperationType currentOp = FirestoreErrorHelper.OperationType.WRITE;
 
-            try {
-                ProxyDatabaseHelper dbHelper = ProxyDatabaseHelper.getInstance(appCtx);
-                SettingsPreferences prefs = new SettingsPreferences(appCtx);
-                List<ProxyConfig> localProxies = dbHelper.getAllProxies();
+            FirebaseFirestore db = getFirestore(appCtx);
+            if (db != null) {
+                try {
+                    prepareFirestoreSession(appCtx, user, db);
 
-                // 1. Fetch existing cloud proxies
-                currentPath = "users/" + uid + "/proxies";
-                currentOp = FirestoreErrorHelper.OperationType.LIST;
-                QuerySnapshot cloudSnapshot = Tasks.await(
-                        db.collection("users").document(uid).collection("proxies").get()
-                );
+                    ProxyDatabaseHelper dbHelper = ProxyDatabaseHelper.getInstance(appCtx);
+                    SettingsPreferences prefs = new SettingsPreferences(appCtx);
+                    List<ProxyConfig> localProxies = dbHelper.getAllProxies();
 
-                Map<String, DocumentSnapshot> cloudByKey = new HashMap<>();
-                for (DocumentSnapshot doc : cloudSnapshot.getDocuments()) {
-                    cloudByKey.put(doc.getId(), doc);
-                }
+                    // 1. Fetch existing cloud proxies
+                    currentPath = "users/" + uid + "/proxies";
+                    currentOp = FirestoreErrorHelper.OperationType.LIST;
+                    final Query proxiesQuery = db.collection("users").document(uid).collection("proxies");
+                    QuerySnapshot cloudSnapshot = executeReadWithRetry(db, proxiesQuery::get);
 
-                // 2. Upload local proxies to cloud (create or update)
-                Set<String> localKeys = new HashSet<>();
-                int uploadedCount = 0;
-                currentOp = FirestoreErrorHelper.OperationType.WRITE;
-
-                for (int i = 0; i < localProxies.size(); i++) {
-                    ProxyConfig local = localProxies.get(i);
-                    if (local.getHost().isEmpty() || local.getPort() < 1 || local.getPort() > 65535) {
-                        continue;
+                    Map<String, DocumentSnapshot> cloudByKey = new HashMap<>();
+                    for (DocumentSnapshot doc : cloudSnapshot.getDocuments()) {
+                        cloudByKey.put(doc.getId(), doc);
                     }
-                    String key = buildProxyDocKey(local);
-                    localKeys.add(key);
-                    currentPath = "users/" + uid + "/proxies/" + key;
-                    DocumentReference docRef = db.collection("users")
+
+                    // 2. Upload local proxies to cloud (create or update)
+                    Set<String> localKeys = new HashSet<>();
+                    int uploadedCount = 0;
+                    currentOp = FirestoreErrorHelper.OperationType.WRITE;
+
+                    for (int i = 0; i < localProxies.size(); i++) {
+                        ProxyConfig local = localProxies.get(i);
+                        if (local.getHost().isEmpty() || local.getPort() < 1 || local.getPort() > 65535) {
+                            continue;
+                        }
+                        String key = buildProxyDocKey(local);
+                        localKeys.add(key);
+                        currentPath = "users/" + uid + "/proxies/" + key;
+                        final DocumentReference docRef = db.collection("users")
+                                .document(uid)
+                                .collection("proxies")
+                                .document(key);
+
+                        final boolean existsOnCloud = cloudByKey.containsKey(key);
+                        final Map<String, Object> payload = buildCloudProxyMap(local, !existsOnCloud);
+                        executeWithRetry(db, () -> existsOnCloud ? docRef.update(payload) : docRef.set(payload));
+                        uploadedCount++;
+                    }
+
+                    // 3. Download cloud proxies missing on this device
+                    int downloadedCount = 0;
+                    for (DocumentSnapshot cloudDoc : cloudSnapshot.getDocuments()) {
+                        if (localKeys.contains(cloudDoc.getId())) {
+                            continue;
+                        }
+                        ProxyConfig fromCloud = parseCloudProxy(cloudDoc);
+                        if (fromCloud != null) {
+                            dbHelper.insertProxy(fromCloud);
+                            downloadedCount++;
+                        }
+                    }
+
+                    // 4. Sync app preferences
+                    currentPath = "users/" + uid + "/sync_state/preferences";
+                    final DocumentReference prefsRef = db.collection("users")
                             .document(uid)
-                            .collection("proxies")
-                            .document(key);
+                            .collection("sync_state")
+                            .document("preferences");
+                    currentOp = FirestoreErrorHelper.OperationType.GET;
+                    DocumentSnapshot cloudPrefsDoc = executeDocReadWithRetry(db, prefsRef);
 
-                    boolean existsOnCloud = cloudByKey.containsKey(key);
-                    Map<String, Object> payload = buildCloudProxyMap(local, !existsOnCloud);
-                    if (existsOnCloud) {
-                        Tasks.await(docRef.update(payload));
-                    } else {
-                        Tasks.await(docRef.set(payload));
+                    if (cloudPrefsDoc.exists() && localProxies.isEmpty()) {
+                        applyCloudPreferences(prefs, cloudPrefsDoc);
                     }
-                    uploadedCount++;
-                }
 
-                // 3. Download cloud proxies missing on this device
-                int downloadedCount = 0;
-                for (DocumentSnapshot cloudDoc : cloudSnapshot.getDocuments()) {
-                    if (localKeys.contains(cloudDoc.getId())) {
-                        continue;
+                    currentOp = FirestoreErrorHelper.OperationType.WRITE;
+                    final boolean prefsExist = cloudPrefsDoc.exists();
+                    final Map<String, Object> prefsMap = buildSyncPreferencesMap(prefs, !prefsExist);
+                    executeWithRetry(db, () -> prefsExist ? prefsRef.update(prefsMap) : prefsRef.set(prefsMap));
+
+                    // 5. Refresh local proxy repository if any cloud proxies were downloaded
+                    List<ProxyConfig> mergedProxies = dbHelper.getAllProxies();
+                    if (downloadedCount > 0) {
+                        ProxyRepository.getInstance(appCtx).reloadAll();
+                        ProxyRepository.getInstance(appCtx).addLog(
+                                ProxyLogEntry.Level.SUCCESS,
+                                ProxyLogFormatter.getString(appCtx, R.string.log_cloud_sync_done, uploadedCount, downloadedCount)
+                        );
                     }
-                    ProxyConfig fromCloud = parseCloudProxy(cloudDoc);
-                    if (fromCloud != null) {
-                        dbHelper.insertProxy(fromCloud);
-                        downloadedCount++;
+
+                    // 6. Update /users/{uid} summary
+                    currentPath = "users/" + uid;
+                    currentOp = FirestoreErrorHelper.OperationType.GET;
+                    final DocumentReference userRef = db.collection("users").document(uid);
+                    DocumentSnapshot userDoc = executeDocReadWithRetry(db, userRef);
+
+                    int nextSyncCount = 1;
+                    if (userDoc.exists()) {
+                        Object rawCount = userDoc.get("syncCount");
+                        if (rawCount instanceof Number) {
+                            nextSyncCount = Math.min(1_000_000, Math.max(0, ((Number) rawCount).intValue()) + 1);
+                        }
                     }
-                }
 
-                // 4. Sync app preferences
-                currentPath = "users/" + uid + "/sync_state/preferences";
-                DocumentReference prefsRef = db.collection("users")
-                        .document(uid)
-                        .collection("sync_state")
-                        .document("preferences");
-                currentOp = FirestoreErrorHelper.OperationType.GET;
-                DocumentSnapshot cloudPrefsDoc = Tasks.await(prefsRef.get());
-
-                if (cloudPrefsDoc.exists() && localProxies.isEmpty()) {
-                    applyCloudPreferences(prefs, cloudPrefsDoc);
-                }
-
-                currentOp = FirestoreErrorHelper.OperationType.WRITE;
-                Map<String, Object> prefsMap = buildSyncPreferencesMap(prefs, !cloudPrefsDoc.exists());
-                if (cloudPrefsDoc.exists()) {
-                    Tasks.await(prefsRef.update(prefsMap));
-                } else {
-                    Tasks.await(prefsRef.set(prefsMap));
-                }
-
-                // 5. Refresh local proxy repository if any cloud proxies were downloaded
-                List<ProxyConfig> mergedProxies = dbHelper.getAllProxies();
-                if (downloadedCount > 0) {
-                    ProxyRepository.getInstance(appCtx).reloadAll();
-                    ProxyRepository.getInstance(appCtx).addLog(
-                            ProxyLogEntry.Level.SUCCESS,
-                            ProxyLogFormatter.getString(appCtx, R.string.log_cloud_sync_done, uploadedCount, downloadedCount)
+                    currentOp = FirestoreErrorHelper.OperationType.WRITE;
+                    final boolean userExists = userDoc.exists();
+                    final Map<String, Object> summaryMap = buildUserSummaryMap(
+                            appCtx,
+                            user,
+                            mergedProxies,
+                            prefs,
+                            nextSyncCount,
+                            !userExists
                     );
-                }
+                    executeWithRetry(db, () -> userExists ? userRef.update(summaryMap) : userRef.set(summaryMap));
 
-                // 6. Update /users/{uid} summary
-                currentPath = "users/" + uid;
-                currentOp = FirestoreErrorHelper.OperationType.GET;
-                DocumentReference userRef = db.collection("users").document(uid);
-                DocumentSnapshot userDoc = Tasks.await(userRef.get());
-
-                int nextSyncCount = 1;
-                if (userDoc.exists()) {
-                    Object rawCount = userDoc.get("syncCount");
-                    if (rawCount instanceof Number) {
-                        nextSyncCount = Math.min(1_000_000, Math.max(0, ((Number) rawCount).intValue()) + 1);
+                    // 7. Write immutable sync event for Admin statistics (non-fatal if custom rules omit sync_events)
+                    String eventId = buildSyncEventId(uid);
+                    currentPath = "sync_events/" + eventId;
+                    currentOp = FirestoreErrorHelper.OperationType.CREATE;
+                    final Map<String, Object> eventMap = buildSyncEventMap(
+                            user,
+                            uploadedCount,
+                            downloadedCount,
+                            mergedProxies.size()
+                    );
+                    try {
+                        final DocumentReference eventRef = db.collection("sync_events").document(eventId);
+                        executeWithRetry(db, () -> eventRef.set(eventMap));
+                    } catch (Exception telemetryEx) {
+                        Throwable root = FirestoreErrorHelper.unwrapRootCause(telemetryEx);
+                        if (root instanceof FirebaseFirestoreException
+                                && ((FirebaseFirestoreException) root).getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                            FirestoreErrorHelper.handleFirestoreError(telemetryEx, currentOp, currentPath);
+                        } else {
+                            throw telemetryEx;
+                        }
                     }
-                }
 
-                currentOp = FirestoreErrorHelper.OperationType.WRITE;
-                Map<String, Object> summaryMap = buildUserSummaryMap(
+                    long syncedAtMs = System.currentTimeMillis();
+                    dbHelper.putSetting(KEY_LAST_SYNC_PREFIX + uid, String.valueOf(syncedAtMs));
+
+                    SyncResult result = new SyncResult(
+                            uploadedCount,
+                            downloadedCount,
+                            mergedProxies.size(),
+                            syncedAtMs
+                    );
+                    postToMain(() -> callback.onSuccess(result));
+                    return;
+                } catch (Exception e) {
+                    if (!FirestoreErrorHelper.isTransientRetryable(e)) {
+                        FirestoreErrorHelper.handleFirestoreError(e, currentOp, currentPath);
+                        String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, e);
+                        postToMain(() -> callback.onError(friendly));
+                        return;
+                    }
+                    Log.w(TAG, "Firestore SDK transient failure on " + currentPath + ", switching to HTTPS REST fallback", e);
+                }
+            } else {
+                Log.w(TAG, "Firestore SDK null (" + lastFirestoreInitError + "), using HTTPS REST fallback");
+            }
+
+            syncAcrossDevicesViaRest(appCtx, user, callback);
+        });
+    }
+
+    private static void syncAcrossDevicesViaRest(
+            @NonNull Context appCtx,
+            @NonNull FirebaseUser user,
+            @NonNull SyncCallback callback) {
+        String uid = user.getUid();
+        String currentPath = "users/" + uid;
+        FirestoreErrorHelper.OperationType currentOp = FirestoreErrorHelper.OperationType.WRITE;
+
+        try {
+            try {
+                ProviderInstaller.installIfNeeded(appCtx);
+            } catch (Throwable ignored) {
+            }
+
+            ProxyDatabaseHelper dbHelper = ProxyDatabaseHelper.getInstance(appCtx);
+            SettingsPreferences prefs = new SettingsPreferences(appCtx);
+            List<ProxyConfig> localProxies = dbHelper.getAllProxies();
+
+            // 1. Fetch existing cloud proxies via REST
+            currentPath = "users/" + uid + "/proxies";
+            currentOp = FirestoreErrorHelper.OperationType.LIST;
+            List<FirestoreRestClient.RestDocument> cloudDocs =
+                    FirestoreRestClient.listDocuments(appCtx, user, currentPath);
+
+            Map<String, FirestoreRestClient.RestDocument> cloudByKey = new HashMap<>();
+            for (FirestoreRestClient.RestDocument doc : cloudDocs) {
+                cloudByKey.put(doc.getId(), doc);
+            }
+
+            // 2. Upload local proxies to cloud via REST (create or update)
+            Set<String> localKeys = new HashSet<>();
+            int uploadedCount = 0;
+            currentOp = FirestoreErrorHelper.OperationType.WRITE;
+
+            for (int i = 0; i < localProxies.size(); i++) {
+                ProxyConfig local = localProxies.get(i);
+                if (local.getHost().isEmpty() || local.getPort() < 1 || local.getPort() > 65535) {
+                    continue;
+                }
+                String key = buildProxyDocKey(local);
+                localKeys.add(key);
+                currentPath = "users/" + uid + "/proxies/" + key;
+
+                boolean existsOnCloud = cloudByKey.containsKey(key);
+                Map<String, Object> payload = buildCloudProxyMap(local, !existsOnCloud);
+                List<String> tsFields = existsOnCloud
+                        ? Collections.singletonList("updatedAt")
+                        : Arrays.asList("createdAt", "updatedAt");
+                FirestoreRestClient.commitDocument(
                         appCtx,
                         user,
-                        mergedProxies,
-                        prefs,
-                        nextSyncCount,
-                        !userDoc.exists()
+                        currentPath,
+                        existsOnCloud ? Boolean.TRUE : Boolean.FALSE,
+                        payload,
+                        tsFields
                 );
-                if (userDoc.exists()) {
-                    Tasks.await(userRef.update(summaryMap));
-                } else {
-                    Tasks.await(userRef.set(summaryMap));
-                }
-
-                // 7. Write immutable sync event for Admin statistics
-                String eventId = buildSyncEventId(uid);
-                currentPath = "sync_events/" + eventId;
-                currentOp = FirestoreErrorHelper.OperationType.CREATE;
-                Map<String, Object> eventMap = buildSyncEventMap(
-                        user,
-                        uploadedCount,
-                        downloadedCount,
-                        mergedProxies.size()
-                );
-                Tasks.await(db.collection("sync_events").document(eventId).set(eventMap));
-
-                long syncedAtMs = System.currentTimeMillis();
-                dbHelper.putSetting(KEY_LAST_SYNC_PREFIX + uid, String.valueOf(syncedAtMs));
-
-                SyncResult result = new SyncResult(
-                        uploadedCount,
-                        downloadedCount,
-                        mergedProxies.size(),
-                        syncedAtMs
-                );
-                postToMain(() -> callback.onSuccess(result));
-            } catch (Exception e) {
-                FirestoreErrorHelper.handleFirestoreError(e, currentOp, currentPath);
-                String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, e);
-                postToMain(() -> callback.onError(friendly));
+                uploadedCount++;
             }
-        });
+
+            // 3. Download cloud proxies missing on this device
+            int downloadedCount = 0;
+            for (FirestoreRestClient.RestDocument cloudDoc : cloudDocs) {
+                if (localKeys.contains(cloudDoc.getId())) {
+                    continue;
+                }
+                ProxyConfig fromCloud = parseCloudProxyFromRest(cloudDoc);
+                if (fromCloud != null) {
+                    dbHelper.insertProxy(fromCloud);
+                    downloadedCount++;
+                }
+            }
+
+            // 4. Sync app preferences via REST
+            currentPath = "users/" + uid + "/sync_state/preferences";
+            currentOp = FirestoreErrorHelper.OperationType.GET;
+            FirestoreRestClient.RestDocument cloudPrefsDoc =
+                    FirestoreRestClient.getDocument(appCtx, user, currentPath);
+
+            if (cloudPrefsDoc.exists() && localProxies.isEmpty()) {
+                applyCloudPreferencesFromRest(prefs, cloudPrefsDoc);
+            }
+
+            currentOp = FirestoreErrorHelper.OperationType.WRITE;
+            boolean prefsExist = cloudPrefsDoc.exists();
+            Map<String, Object> prefsMap = buildSyncPreferencesMap(prefs, !prefsExist);
+            List<String> prefsTs = prefsExist
+                    ? Collections.singletonList("updatedAt")
+                    : Arrays.asList("createdAt", "updatedAt");
+            FirestoreRestClient.commitDocument(
+                    appCtx,
+                    user,
+                    currentPath,
+                    prefsExist ? Boolean.TRUE : Boolean.FALSE,
+                    prefsMap,
+                    prefsTs
+            );
+
+            // 5. Refresh local proxy repository if any cloud proxies were downloaded
+            List<ProxyConfig> mergedProxies = dbHelper.getAllProxies();
+            if (downloadedCount > 0) {
+                ProxyRepository.getInstance(appCtx).reloadAll();
+                ProxyRepository.getInstance(appCtx).addLog(
+                        ProxyLogEntry.Level.SUCCESS,
+                        ProxyLogFormatter.getString(appCtx, R.string.log_cloud_sync_done, uploadedCount, downloadedCount)
+                );
+            }
+
+            // 6. Update /users/{uid} summary via REST
+            currentPath = "users/" + uid;
+            currentOp = FirestoreErrorHelper.OperationType.GET;
+            FirestoreRestClient.RestDocument userDoc =
+                    FirestoreRestClient.getDocument(appCtx, user, currentPath);
+
+            int nextSyncCount = 1;
+            if (userDoc.exists()) {
+                nextSyncCount = Math.min(1_000_000, Math.max(0, userDoc.getInt("syncCount")) + 1);
+            }
+
+            currentOp = FirestoreErrorHelper.OperationType.WRITE;
+            boolean userExists = userDoc.exists();
+            Map<String, Object> summaryMap = buildUserSummaryMap(
+                    appCtx,
+                    user,
+                    mergedProxies,
+                    prefs,
+                    nextSyncCount,
+                    !userExists
+            );
+            List<String> userTs = userExists
+                    ? Arrays.asList("updatedAt", "lastSyncAt")
+                    : Arrays.asList("createdAt", "updatedAt", "lastSyncAt");
+            FirestoreRestClient.commitDocument(
+                    appCtx,
+                    user,
+                    currentPath,
+                    userExists ? Boolean.TRUE : Boolean.FALSE,
+                    summaryMap,
+                    userTs
+            );
+
+            // 7. Write immutable sync event for Admin statistics (non-fatal if rules omit sync_events)
+            String eventId = buildSyncEventId(uid);
+            currentPath = "sync_events/" + eventId;
+            currentOp = FirestoreErrorHelper.OperationType.CREATE;
+            Map<String, Object> eventMap = buildSyncEventMap(
+                    user,
+                    uploadedCount,
+                    downloadedCount,
+                    mergedProxies.size()
+            );
+            try {
+                FirestoreRestClient.commitDocument(
+                        appCtx,
+                        user,
+                        currentPath,
+                        Boolean.FALSE,
+                        eventMap,
+                        Collections.singletonList("createdAt")
+                );
+            } catch (Exception telemetryEx) {
+                Throwable root = FirestoreErrorHelper.unwrapRootCause(telemetryEx);
+                if (root instanceof FirebaseFirestoreException
+                        && ((FirebaseFirestoreException) root).getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    FirestoreErrorHelper.handleFirestoreError(telemetryEx, currentOp, currentPath);
+                } else {
+                    throw telemetryEx;
+                }
+            }
+
+            long syncedAtMs = System.currentTimeMillis();
+            dbHelper.putSetting(KEY_LAST_SYNC_PREFIX + uid, String.valueOf(syncedAtMs));
+
+            SyncResult result = new SyncResult(
+                    uploadedCount,
+                    downloadedCount,
+                    mergedProxies.size(),
+                    syncedAtMs
+            );
+            postToMain(() -> callback.onSuccess(result));
+        } catch (Exception e) {
+            FirestoreErrorHelper.handleFirestoreError(e, currentOp, currentPath);
+            String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, e);
+            postToMain(() -> callback.onError(friendly));
+        }
+    }
+
+    private static void prepareFirestoreSession(
+            @NonNull Context appCtx,
+            @NonNull FirebaseUser user,
+            @NonNull FirebaseFirestore db) {
+        try {
+            ProviderInstaller.installIfNeeded(appCtx);
+        } catch (Throwable ignored) {
+        }
+        try {
+            Tasks.await(user.getIdToken(false), 10L, TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+        }
+        try {
+            Tasks.await(db.enableNetwork(), 10L, TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @VisibleForTesting
+    public static boolean hasActiveNetworkConnection(@NonNull Context context) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) {
+                return true;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network active = cm.getActiveNetwork();
+                if (active == null) {
+                    return false;
+                }
+                NetworkCapabilities caps = cm.getNetworkCapabilities(active);
+                return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+            }
+            @SuppressWarnings("deprecation")
+            NetworkInfo info = cm.getActiveNetworkInfo();
+            return info != null && info.isConnected();
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private interface SourceQueryCaller {
+        Task<QuerySnapshot> call(Source source);
+    }
+
+    private static QuerySnapshot executeReadWithRetry(
+            @NonNull FirebaseFirestore db,
+            @NonNull SourceQueryCaller caller) throws Exception {
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt++) {
+            try {
+                Source source = attempt == 1 ? Source.DEFAULT : Source.SERVER;
+                return awaitTask(caller.call(source), TASK_TIMEOUT_SECONDS);
+            } catch (Exception e) {
+                lastError = e;
+                if (!FirestoreErrorHelper.isTransientRetryable(e) || attempt >= MAX_TRANSIENT_ATTEMPTS) {
+                    throw e;
+                }
+                recoverNetworkBeforeRetry(db, attempt);
+            }
+        }
+        throw lastError;
+    }
+
+    private static DocumentSnapshot executeDocReadWithRetry(
+            @NonNull FirebaseFirestore db,
+            @NonNull DocumentReference docRef) throws Exception {
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt++) {
+            try {
+                Source source = attempt == 1 ? Source.DEFAULT : Source.SERVER;
+                return awaitTask(docRef.get(source), TASK_TIMEOUT_SECONDS);
+            } catch (Exception e) {
+                lastError = e;
+                if (!FirestoreErrorHelper.isTransientRetryable(e) || attempt >= MAX_TRANSIENT_ATTEMPTS) {
+                    throw e;
+                }
+                recoverNetworkBeforeRetry(db, attempt);
+            }
+        }
+        throw lastError;
+    }
+
+    private static <T> T executeWithRetry(
+            @NonNull FirebaseFirestore db,
+            @NonNull Supplier<Task<T>> taskSupplier) throws Exception {
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt++) {
+            try {
+                return awaitTask(taskSupplier.get(), TASK_TIMEOUT_SECONDS);
+            } catch (Exception e) {
+                lastError = e;
+                if (!FirestoreErrorHelper.isTransientRetryable(e) || attempt >= MAX_TRANSIENT_ATTEMPTS) {
+                    throw e;
+                }
+                recoverNetworkBeforeRetry(db, attempt);
+            }
+        }
+        throw lastError;
+    }
+
+    private static <T> T awaitTask(@NonNull Task<T> task, long timeoutSeconds) throws Exception {
+        try {
+            return Tasks.await(task, timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            throw e;
+        }
+    }
+
+    private static void recoverNetworkBeforeRetry(@NonNull FirebaseFirestore db, int attempt) {
+        try {
+            Tasks.await(db.enableNetwork(), 8L, TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+        }
+        try {
+            Thread.sleep(600L * attempt);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @VisibleForTesting
@@ -404,7 +809,7 @@ public final class CloudSyncManager {
         map.put("firewallEnabled", prefs.isFirewallEnabled());
         map.put("privateRoutingEnabled", prefs.isPrivateNetworkRoutingEnabled());
         map.put("themeMode", prefs.getThemeMode().name());
-        map.put("languageTag", truncate(prefs.getAppLanguage().getTag(), 20));
+        map.put("languageTag", safeLanguageTag(prefs));
         map.put("lastDeviceModel", truncate(getDeviceLabel(), 120));
         map.put("appVersion", truncate(BuildConfig.VERSION_NAME, 30));
         map.put("syncCount", Math.min(1_000_000, Math.max(0, syncCount)));
@@ -443,7 +848,7 @@ public final class CloudSyncManager {
     private static Map<String, Object> buildSyncPreferencesMap(@NonNull SettingsPreferences prefs, boolean isCreate) {
         Map<String, Object> map = new HashMap<>();
         map.put("themeMode", prefs.getThemeMode().name());
-        map.put("languageTag", truncate(prefs.getAppLanguage().getTag(), 20));
+        map.put("languageTag", safeLanguageTag(prefs));
         map.put("autoStopOnDisconnect", prefs.isAutoStopOnDisconnectEnabled());
         map.put("vpnTimerMinutes", Math.max(0, Math.min(1440, prefs.getVpnTimerMinutes())));
         map.put("firewallEnabled", prefs.isFirewallEnabled());
@@ -535,6 +940,74 @@ public final class CloudSyncManager {
         if (ranges != null) {
             prefs.setPrivateNetworkRangesText(ranges);
         }
+    }
+
+    @Nullable
+    private static ProxyConfig parseCloudProxyFromRest(@NonNull FirestoreRestClient.RestDocument doc) {
+        String host = doc.getString("host");
+        Number rawPort = doc.getNumber("port");
+        int port = rawPort != null ? rawPort.intValue() : -1;
+        if (host == null || host.trim().isEmpty() || port < 1 || port > 65535) {
+            return null;
+        }
+        ProxyConfig p = new ProxyConfig();
+        p.setName(nonNull(doc.getString("name")));
+        p.setProtocol(ProxyConfig.Protocol.fromString(doc.getString("protocol")));
+        p.setHost(host.trim());
+        p.setPort(port);
+        p.setAuthMethod(ProxyConfig.AuthMethod.fromString(doc.getString("authMethod")));
+        p.setUsername(nonNull(doc.getString("username")));
+        p.setPassword(nonNull(doc.getString("password")));
+        p.setDnsMode(ProxyConfig.DnsMode.fromString(doc.getString("dnsMode")));
+        p.setCustomDns(nonNull(doc.getString("customDns")));
+
+        Boolean enabled = doc.getBoolean("enabled");
+        p.setEnabled(enabled == null || enabled);
+
+        p.setLatencyMs(doc.getLong("latencyMs", ProxyConfig.LATENCY_UNTESTED));
+        p.setExitIp(nonNull(doc.getString("exitIp")));
+        p.setCountry(nonNull(doc.getString("country")));
+        p.setSortOrder(doc.getInt("sortOrder"));
+        return p;
+    }
+
+    private static void applyCloudPreferencesFromRest(
+            @NonNull SettingsPreferences prefs,
+            @NonNull FirestoreRestClient.RestDocument doc) {
+        String theme = doc.getString("themeMode");
+        if (!TextUtils.isEmpty(theme)) {
+            prefs.setThemeMode(SettingsPreferences.ThemeMode.fromStoredValue(theme));
+        }
+        String lang = doc.getString("languageTag");
+        if (!TextUtils.isEmpty(lang)) {
+            prefs.setAppLanguage(SettingsPreferences.AppLanguage.fromTag(lang));
+        }
+        Boolean autoStop = doc.getBoolean("autoStopOnDisconnect");
+        if (autoStop != null) {
+            prefs.setAutoStopOnDisconnectEnabled(autoStop);
+        }
+        Number rawTimer = doc.getNumber("vpnTimerMinutes");
+        if (rawTimer != null) {
+            prefs.setVpnTimerMinutes(rawTimer.intValue());
+        }
+        Boolean firewall = doc.getBoolean("firewallEnabled");
+        if (firewall != null) {
+            prefs.setFirewallEnabled(firewall);
+        }
+        Boolean privateRouting = doc.getBoolean("privateRoutingEnabled");
+        if (privateRouting != null) {
+            prefs.setPrivateNetworkRoutingEnabled(privateRouting);
+        }
+        String ranges = doc.getString("privateRoutingRanges");
+        if (ranges != null) {
+            prefs.setPrivateNetworkRangesText(ranges);
+        }
+    }
+
+    @NonNull
+    private static String safeLanguageTag(@NonNull SettingsPreferences prefs) {
+        String tag = truncate(prefs.getAppLanguage().getTag(), 20);
+        return tag.isEmpty() ? "system" : tag;
     }
 
     @NonNull

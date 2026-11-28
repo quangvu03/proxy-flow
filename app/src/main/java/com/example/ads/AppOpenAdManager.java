@@ -89,6 +89,24 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     private AppOpenAdManager(@NonNull Context appContext) {
         this.appContext = appContext;
         this.prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        AdsConfigManager.getInstance(appContext).addListener(enabled -> {
+            if (!enabled) {
+                clearPendingAndCachedAd();
+            } else if (startedActivityCount > 0) {
+                loadAdIfNeeded();
+            }
+        });
+    }
+
+    private void clearPendingAndCachedAd() {
+        if (pendingRetryRunnable != null) {
+            mainHandler.removeCallbacks(pendingRetryRunnable);
+            pendingRetryRunnable = null;
+        }
+        pendingShowForCurrentOpen = false;
+        pendingShowDeadlineMs = 0L;
+        appOpenAd = null;
+        isLoadingAd = false;
     }
 
     @NonNull
@@ -170,6 +188,10 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     }
 
     public void loadAdIfNeeded() {
+        if (!AdsConfigManager.getInstance(appContext).isAdsEnabled()) {
+            clearPendingAndCachedAd();
+            return;
+        }
         if (isLoadingAd || isAdAvailable()) {
             return;
         }
@@ -179,7 +201,7 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
         }
         isLoadingAd = true;
         AdMobBannerHelper.runWhenInitialized(appContext, () -> {
-            if (isAdAvailable()) {
+            if (!AdsConfigManager.getInstance(appContext).isAdsEnabled() || isAdAvailable()) {
                 isLoadingAd = false;
                 return;
             }
@@ -233,6 +255,10 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
         if (isShowingAd || isAdActivity(activity)) {
             return;
         }
+        if (!AdsConfigManager.getInstance(appContext).isAdsEnabled()) {
+            clearPendingAndCachedAd();
+            return;
+        }
         consecutiveLoadFailures = 0;
         OpenDecision decision = recordAppOpenAndEvaluate();
         Log.d(TAG, "App foreground open #" + decision.getOpenCount()
@@ -248,6 +274,11 @@ public final class AppOpenAdManager implements Application.ActivityLifecycleCall
     }
 
     private void tryShowPendingAd(@NonNull Activity activity) {
+        if (!AdsConfigManager.getInstance(appContext).isAdsEnabled()) {
+            pendingShowForCurrentOpen = false;
+            pendingShowDeadlineMs = 0L;
+            return;
+        }
         if (!pendingShowForCurrentOpen || isShowingAd || isAdActivity(activity)) {
             return;
         }

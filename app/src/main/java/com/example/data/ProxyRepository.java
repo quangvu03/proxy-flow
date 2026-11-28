@@ -71,10 +71,6 @@ public class ProxyRepository {
             synchronized (ProxyRepository.class) {
                 current = instance;
                 if (current == null || current.appContext != appCtx) {
-                    System.err.println("[ProxyRepoDbg] replacing instance! cur=" + (current == null ? "null" : System.identityHashCode(current.appContext))
-                            + " new=" + System.identityHashCode(appCtx) + " rawCtx=" + context.getClass().getName()
-                            + " thread=" + Thread.currentThread().getName());
-                    new Exception("ProxyRepoDbg").printStackTrace(System.err);
                     if (current != null) {
                         current.shutdownInternal();
                     }
@@ -545,10 +541,10 @@ public class ProxyRepository {
             dbHelper.insertLog(ProxyLogEntry.Level.INFO,
                     ProxyLogFormatter.getString(appContext, R.string.log_proxy_batch_test_done,
                             total, ok));
+            refreshInternal();
             batchTestSummaryLiveData.postValue(
                     new BatchTestSummary(batchEventSeq.incrementAndGet(), total, ok, failed));
             batchTestingLiveData.postValue(false);
-            refreshInternal();
         });
     }
 

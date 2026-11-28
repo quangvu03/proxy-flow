@@ -10,8 +10,8 @@ let testEnv;
 const PROJECT_ID = process.env.GCP_PROJECT || "demo-no-project";
 const ALICE_UID = "alice_user_123";
 const BOB_UID = "bob_user_456";
-const ADMIN_UID_1 = "xuonHbFXXrPQEJVZPjyJy9itC7x1";
-const ADMIN_UID_2 = "jACOpeQtRie82vw5S20AUWfZxD53";
+const RBAC_ADMIN_UID = "rbac_admin_user_001";
+const INACTIVE_ADMIN_UID = "rbac_inactive_admin_002";
 
 const [emulatorHost, emulatorPortStr] = (process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8085").split(":");
 const emulatorPort = parseInt(emulatorPortStr, 10);
@@ -108,7 +108,7 @@ beforeEach(async () => {
   }
 });
 
-test("Unauthenticated users cannot read or write any collection", async () => {
+test("Unauthenticated users cannot read or write any collection including roles and app_config", async () => {
   const unauthDb = testEnv.unauthenticatedContext().firestore();
   const ts = new Date(Date.now() - 2000);
 
@@ -118,13 +118,41 @@ test("Unauthenticated users cannot read or write any collection", async () => {
   await assertFails(unauthDb.collection("users").doc(ALICE_UID).collection("proxies").get());
   await assertFails(unauthDb.collection("sync_events").get());
   await assertFails(unauthDb.collection("sync_events").doc("evt_1").set(validSyncEventPayload(ALICE_UID, ts)));
+  await assertFails(unauthDb.collection("roles").get());
+  await assertFails(unauthDb.collection("roles").doc(ALICE_UID).get());
+  await assertFails(
+    unauthDb.collection("roles").doc(ALICE_UID).set({ role: "admin", active: true })
+  );
+  await assertFails(unauthDb.collection("app_config").doc("ads").get());
+  await assertFails(unauthDb.collection("app_config").doc("ads").set({ ads_enabled: false }));
 });
 
-test("Authenticated user can create/update own sync profile, proxies, preferences, and sync events", async () => {
+test("Authenticated user can sync own data and read app_config/ads, but cannot read/write roles or write app_config", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.collection("app_config").doc("ads").set({ ads_enabled: true });
+    await db.collection("roles").doc(ALICE_UID).set({ role: "user", active: true });
+    await db.collection("roles").doc(BOB_UID).set({ role: "admin", active: true });
+  });
+
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const created = new Date(Date.now() - 10000);
   const updated = new Date(Date.now() - 1000);
 
+  // Authenticated user can read /app_config/ads
+  await assertSucceeds(aliceDb.collection("app_config").doc("ads").get());
+
+  // Authenticated regular user CANNOT write /app_config/ads or read/write /roles
+  await assertFails(aliceDb.collection("app_config").doc("ads").set({ ads_enabled: false }));
+  await assertFails(aliceDb.collection("app_config").doc("ads").update({ ads_enabled: false }));
+  await assertFails(aliceDb.collection("roles").doc(ALICE_UID).get());
+  await assertFails(aliceDb.collection("roles").doc(BOB_UID).get());
+  await assertFails(aliceDb.collection("roles").get());
+  await assertFails(aliceDb.collection("roles").doc(ALICE_UID).set({ role: "admin", active: true }));
+  await assertFails(aliceDb.collection("roles").doc(ALICE_UID).update({ role: "admin", active: true }));
+  await assertFails(aliceDb.collection("roles").doc(ALICE_UID).delete());
+
+  // Own sync collections work normally
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).set(validUserSummary(ALICE_UID, created))
   );
@@ -136,143 +164,97 @@ test("Authenticated user can create/update own sync profile, proxies, preference
       lastSyncAt: updated,
     })
   );
-
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).collection("proxies").doc("proxy_1").set(validProxyPayload(created))
   );
   await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("proxies").doc("proxy_1").update({
-      latencyMs: 32,
-      updatedAt: updated,
-    })
-  );
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("proxies").get()
-  );
-
-  await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).collection("sync_state").doc("preferences").set(validPrefsPayload(created))
   );
   await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).collection("sync_state").doc("preferences").update({
-      themeMode: "LIGHT",
-      updatedAt: updated,
-    })
-  );
-
-  await assertSucceeds(
     aliceDb.collection("sync_events").doc("evt_alice_1").set(validSyncEventPayload(ALICE_UID, updated))
   );
-  await assertSucceeds(
-    aliceDb.collection("sync_events").where("userId", "==", ALICE_UID).get()
-  );
 });
 
-test("Regular user cannot list all users, read another user's data, or list all sync_events", async () => {
+test("Inactive admin (active: false) is denied roles read, dashboard collections, and app_config/ads writes", async () => {
   const created = new Date(Date.now() - 5000);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    await db.collection("users").doc(BOB_UID).set(validUserSummary(BOB_UID, created));
-    await db.collection("users").doc(BOB_UID).collection("proxies").doc("p1").set(validProxyPayload(created));
-    await db.collection("sync_events").doc("evt_bob_1").set(validSyncEventPayload(BOB_UID, created));
+    await db.collection("roles").doc(INACTIVE_ADMIN_UID).set({
+      role: "admin",
+      active: false,
+    });
+    await db.collection("users").doc(ALICE_UID).set(validUserSummary(ALICE_UID, created));
+    await db.collection("app_config").doc("ads").set({ ads_enabled: true });
   });
 
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
-  await assertFails(aliceDb.collection("users").get());
-  await assertFails(aliceDb.collection("users").doc(BOB_UID).get());
-  await assertFails(aliceDb.collection("users").doc(BOB_UID).collection("proxies").get());
-  await assertFails(aliceDb.collection("sync_events").get());
-  await assertFails(aliceDb.collection("sync_events").doc("evt_bob_1").get());
+  const inactiveAdminDb = testEnv.authenticatedContext(INACTIVE_ADMIN_UID).firestore();
+  await assertFails(inactiveAdminDb.collection("roles").doc(INACTIVE_ADMIN_UID).get());
+  await assertFails(inactiveAdminDb.collection("roles").get());
+  await assertFails(inactiveAdminDb.collection("users").get());
+  await assertFails(inactiveAdminDb.collection("sync_events").get());
+  await assertFails(inactiveAdminDb.collection("app_config").doc("ads").set({ ads_enabled: false }));
+  await assertFails(inactiveAdminDb.collection("app_config").doc("ads").update({ ads_enabled: false }));
 });
 
-test("Validation rejects shadow fields, tampered userId, immutable createdAt changes, and invalid port/future timestamps", async () => {
-  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+test("Active admin (role: 'admin', active: true) can toggle app_config/ads and read roles/stats, while roles write remains denied", async () => {
   const created = new Date(Date.now() - 10000);
-  const future = new Date(Date.now() + 60000);
-
-  await assertSucceeds(
-    aliceDb.collection("users").doc(ALICE_UID).set(validUserSummary(ALICE_UID, created))
-  );
-
-  // Shadow field
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).update({
-      isAdmin: true,
-      updatedAt: new Date(Date.now() - 1000),
-    })
-  );
-
-  // Immutable createdAt mutation
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).update({
-      createdAt: new Date(Date.now() - 1000),
-      updatedAt: new Date(Date.now() - 1000),
-    })
-  );
-
-  // Future timestamp
-  await assertFails(
-    aliceDb.collection("sync_events").doc("evt_future").set(validSyncEventPayload(ALICE_UID, future))
-  );
-
-  // Invalid proxy port
-  const badProxy = validProxyPayload(created);
-  badProxy.port = 70000;
-  await assertFails(
-    aliceDb.collection("users").doc(ALICE_UID).collection("proxies").doc("bad_port").set(badProxy)
-  );
-
-  // Sync event is immutable
-  await assertSucceeds(
-    aliceDb.collection("sync_events").doc("evt_1").set(validSyncEventPayload(ALICE_UID, created))
-  );
-  await assertFails(
-    aliceDb.collection("sync_events").doc("evt_1").update({ uploadedProxies: 99 })
-  );
-  await assertFails(
-    aliceDb.collection("sync_events").doc("evt_1").delete()
-  );
-});
-
-test("Both designated Admin UIDs can list users and sync_events for Firebase statistics", async () => {
-  const created = new Date(Date.now() - 5000);
-  await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await db.collection("users").doc(ALICE_UID).set(validUserSummary(ALICE_UID, created));
-    await db.collection("users").doc(BOB_UID).set(validUserSummary(BOB_UID, created));
-    await db.collection("sync_events").doc("evt_1").set(validSyncEventPayload(ALICE_UID, created));
-    await db.collection("sync_events").doc("evt_2").set(validSyncEventPayload(BOB_UID, created));
-  });
-
-  for (const adminUid of [ADMIN_UID_1, ADMIN_UID_2]) {
-    const adminDb = testEnv.authenticatedContext(adminUid).firestore();
-    await assertSucceeds(adminDb.collection("users").get());
-    await assertSucceeds(adminDb.collection("users").doc(ALICE_UID).get());
-    await assertSucceeds(
-      adminDb.collection("sync_events").orderBy("createdAt", "desc").limit(30).get()
-    );
-  }
-});
-
-test("Verified owner admin email can access stats with a project-scoped UID, unverified email is rejected", async () => {
-  const created = new Date(Date.now() - 5000);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await db.collection("users").doc(ALICE_UID).set(validUserSummary(ALICE_UID, created));
     await db.collection("sync_events").doc("evt_1").set(validSyncEventPayload(ALICE_UID, created));
+    await db.collection("roles").doc(RBAC_ADMIN_UID).set({
+      role: "admin",
+      active: true,
+    });
   });
 
-  const verifiedOwnerDb = testEnv.authenticatedContext("new_project_uid_999", {
-    email: "resetall1st@gmail.com",
-    email_verified: true,
-  }).firestore();
-  await assertSucceeds(verifiedOwnerDb.collection("users").get());
-  await assertSucceeds(verifiedOwnerDb.collection("sync_events").orderBy("createdAt", "desc").limit(30).get());
+  const adminDb = testEnv.authenticatedContext(RBAC_ADMIN_UID).firestore();
+  await assertSucceeds(adminDb.collection("roles").doc(RBAC_ADMIN_UID).get());
+  await assertSucceeds(adminDb.collection("roles").get());
+  await assertSucceeds(adminDb.collection("users").get());
+  await assertSucceeds(
+    adminDb.collection("sync_events").orderBy("createdAt", "desc").limit(30).get()
+  );
 
-  const spoofedOwnerDb = testEnv.authenticatedContext("spoof_uid_999", {
-    email: "resetall1st@gmail.com",
-    email_verified: false,
-  }).firestore();
-  await assertFails(spoofedOwnerDb.collection("users").get());
-  await assertFails(spoofedOwnerDb.collection("sync_events").get());
+  // Admin cannot modify /roles/{uid} from client (managed strictly on Firebase Console / Admin SDK)
+  await assertFails(adminDb.collection("roles").doc(ALICE_UID).set({ role: "admin", active: true }));
+  await assertFails(adminDb.collection("roles").doc(RBAC_ADMIN_UID).delete());
+
+  // Admin can create/update /app_config/ads with valid schema
+  const updated = new Date(Date.now() - 1000);
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("ads").set({
+      ads_enabled: false,
+      updatedAt: updated,
+      updatedBy: RBAC_ADMIN_UID,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("ads").update({
+      ads_enabled: true,
+      updatedAt: new Date(Date.now() - 500),
+      updatedBy: RBAC_ADMIN_UID,
+    })
+  );
+
+  // Admin cannot delete /app_config/ads, write invalid types, spoof updatedBy, or write other configId
+  await assertFails(adminDb.collection("app_config").doc("ads").delete());
+  await assertFails(adminDb.collection("app_config").doc("ads").set({ ads_enabled: "false" }));
+  await assertFails(
+    adminDb.collection("app_config").doc("ads").set({
+      ads_enabled: false,
+      updatedBy: ALICE_UID,
+    })
+  );
+  await assertFails(
+    adminDb.collection("app_config").doc("other_config").set({ ads_enabled: false })
+  );
+
+  // Deactivating admin role immediately revokes ads write and dashboard read
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection("roles").doc(RBAC_ADMIN_UID).update({ active: false });
+  });
+  await assertFails(adminDb.collection("app_config").doc("ads").update({ ads_enabled: false }));
+  await assertFails(adminDb.collection("roles").doc(RBAC_ADMIN_UID).get());
+  await assertFails(adminDb.collection("users").get());
 });

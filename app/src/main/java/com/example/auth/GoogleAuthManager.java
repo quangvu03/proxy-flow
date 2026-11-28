@@ -56,15 +56,35 @@ public final class GoogleAuthManager {
     }
 
     @Nullable
+    public static FirebaseApp ensureFirebaseApp(@NonNull Context context) {
+        Context appCtx = context.getApplicationContext() != null
+                ? context.getApplicationContext()
+                : context;
+        try {
+            java.util.List<FirebaseApp> apps = FirebaseApp.getApps(appCtx);
+            if (apps.isEmpty()) {
+                FirebaseApp initialized = FirebaseApp.initializeApp(appCtx);
+                if (initialized != null) {
+                    return initialized;
+                }
+            } else {
+                return apps.get(0);
+            }
+            return FirebaseApp.getInstance();
+        } catch (IllegalStateException e) {
+            Log.w(TAG, "FirebaseApp unavailable: " + e.getMessage());
+            return null;
+        }
+    }
+
+    @Nullable
     public static FirebaseAuth getFirebaseAuth(@NonNull Context context) {
         try {
-            if (FirebaseApp.getApps(context.getApplicationContext()).isEmpty()) {
-                FirebaseApp.initializeApp(context.getApplicationContext());
-            }
-            if (FirebaseApp.getApps(context.getApplicationContext()).isEmpty()) {
+            FirebaseApp app = ensureFirebaseApp(context);
+            if (app == null) {
                 return null;
             }
-            return FirebaseAuth.getInstance();
+            return FirebaseAuth.getInstance(app);
         } catch (IllegalStateException e) {
             Log.w(TAG, "FirebaseAuth unavailable: " + e.getMessage());
             return null;
@@ -254,6 +274,7 @@ public final class GoogleAuthManager {
                     .addOnSuccessListener(authResult -> {
                         FirebaseUser user = authResult.getUser();
                         if (user != null) {
+                            AdminConfig.clearCache();
                             if (callback != null) {
                                 MAIN_HANDLER.post(() -> callback.onSuccess(user));
                             }
@@ -312,6 +333,7 @@ public final class GoogleAuthManager {
             @NonNull Context appContext,
             @Nullable FirebaseAuth auth,
             @Nullable Runnable onComplete) {
+        AdminConfig.clearCache();
         if (auth != null) {
             auth.signOut();
         }

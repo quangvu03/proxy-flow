@@ -107,6 +107,13 @@ public final class AdMobBannerHelper {
             if (bannerContainer == null || destroyed) {
                 return;
             }
+            if (!AdsConfigManager.getInstance(activity).isAdsEnabled()) {
+                hideBanner(bannerWrapper, bannerContainer);
+                return;
+            }
+            if (adView != null && bannerContainer.indexOfChild(adView) >= 0) {
+                return;
+            }
 
             try {
                 AdView view = new AdView(activity);
@@ -119,7 +126,8 @@ public final class AdMobBannerHelper {
                 view.setAdListener(new AdListener() {
                     @Override
                     public void onAdLoaded() {
-                        if (bannerWrapper != null && !destroyed) {
+                        if (bannerWrapper != null && !destroyed
+                                && AdsConfigManager.getInstance(activity).isAdsEnabled()) {
                             bannerWrapper.setVisibility(View.VISIBLE);
                         }
                     }
@@ -137,6 +145,10 @@ public final class AdMobBannerHelper {
                     if (destroyed || activity.isFinishing() || activity.isDestroyed() || this.adView == null) {
                         return;
                     }
+                    if (!AdsConfigManager.getInstance(activity).isAdsEnabled()) {
+                        hideBanner(bannerWrapper, bannerContainer);
+                        return;
+                    }
                     try {
                         AdSize adaptiveSize = computeAdaptiveBannerSize(activity, bannerContainer);
                         this.adView.setAdSize(adaptiveSize);
@@ -152,6 +164,22 @@ public final class AdMobBannerHelper {
                 if (bannerWrapper != null) {
                     bannerWrapper.setVisibility(View.GONE);
                 }
+            }
+        }
+
+        public void hideBanner(@Nullable View bannerWrapper, @Nullable ViewGroup bannerContainer) {
+            if (adView != null) {
+                try {
+                    adView.destroy();
+                } catch (Throwable ignored) {
+                }
+                adView = null;
+            }
+            if (bannerContainer != null) {
+                bannerContainer.removeAllViews();
+            }
+            if (bannerWrapper != null) {
+                bannerWrapper.setVisibility(View.GONE);
             }
         }
 

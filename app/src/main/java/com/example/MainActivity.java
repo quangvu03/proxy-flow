@@ -29,6 +29,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.ads.AdMobBannerHelper;
+import com.example.ads.AdsConfigManager;
 import com.example.ads.AppOpenAdManager;
 import com.example.auth.GoogleAuthManager;
 import com.example.data.ProxyRepository;
@@ -80,7 +81,9 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
     private BottomNavigationView bottomNav;
     private NavigationRailView navRail;
     private View adBannerWrapper;
+    private ViewGroup adBannerContainer;
     private final AdMobBannerHelper.BannerController bannerController = new AdMobBannerHelper.BannerController();
+    private final AdsConfigManager.AdsConfigListener adsConfigListener = this::syncBannerWithAdsConfig;
 
     @Nullable
     private FirebaseAuth firebaseAuth;
@@ -117,7 +120,10 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         setContentView(R.layout.activity_main);
 
         repository = ProxyRepository.getInstance(this);
-        viewModel = new ViewModelProvider(this).get(ProxyViewModel.class);
+        viewModel = new ViewModelProvider(
+                this,
+                new ViewModelProvider.AndroidViewModelFactory(getApplication())
+        ).get(ProxyViewModel.class);
 
         topAppBar = findViewById(R.id.top_app_bar);
         setupTopLoginAction(topAppBar);
@@ -126,7 +132,7 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         bottomNav = findViewById(R.id.bottom_navigation);
         navRail = findViewById(R.id.navigation_rail);
         adBannerWrapper = findViewById(R.id.ad_banner_wrapper);
-        ViewGroup adBannerContainer = findViewById(R.id.ad_banner_container);
+        adBannerContainer = findViewById(R.id.ad_banner_container);
 
         splashOverlay = findViewById(R.id.splash_overlay);
         View splashBrandContainer = findViewById(R.id.splash_brand_container);
@@ -162,7 +168,10 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
             return WindowInsetsCompat.CONSUMED;
         });
 
-        bannerController.attachAndLoad(this, adBannerWrapper, adBannerContainer);
+        AdsConfigManager adsConfigManager = AdsConfigManager.getInstance(this);
+        adsConfigManager.startListening();
+        adsConfigManager.addListener(adsConfigListener);
+        syncBannerWithAdsConfig(adsConfigManager.isAdsEnabled());
 
         setupStartupSplash(savedInstanceState, splashBrandContainer);
 
@@ -313,8 +322,20 @@ public class MainActivity extends AppCompatActivity implements ConnectFragment.H
         outState.putInt("current_tab", currentTabId);
     }
 
+    private void syncBannerWithAdsConfig(boolean adsEnabled) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (adsEnabled) {
+            bannerController.attachAndLoad(this, adBannerWrapper, adBannerContainer);
+        } else {
+            bannerController.hideBanner(adBannerWrapper, adBannerContainer);
+        }
+    }
+
     @Override
     protected void onDestroy() {
+        AdsConfigManager.getInstance(this).removeListener(adsConfigListener);
         bannerController.onDestroy();
         if (hideSplashRunnable != null) {
             splashHandler.removeCallbacks(hideSplashRunnable);

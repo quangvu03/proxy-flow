@@ -221,21 +221,7 @@ public class ProxyFailureInspectionTest {
                 Thread.sleep(25);
                 Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(25));
             }
-            com.example.ui.ProxyViewModel vm = new androidx.lifecycle.ViewModelProvider(activity)
-                    .get(com.example.ui.ProxyViewModel.class);
-            assertTrue("Adapter should display proxy before clicking Test All (adapterCount="
-                    + adapter.getItemCount()
-                    + ", repoSize=" + (repo.getProxies().getValue() != null ? repo.getProxies().getValue().size() : -1)
-                    + ", curRepoSize=" + (ProxyRepository.getInstance(context).getProxies().getValue() != null
-                        ? ProxyRepository.getInstance(context).getProxies().getValue().size() : -1)
-                    + ", vmSize=" + (vm.getProxies().getValue() != null ? vm.getProxies().getValue().size() : -1)
-                    + ", repoId=" + System.identityHashCode(repo)
-                    + ", curRepoId=" + System.identityHashCode(ProxyRepository.getInstance(context))
-                    + ", sameRepo=" + (repo.getProxies() == vm.getProxies())
-                    + ", curSameVm=" + (ProxyRepository.getInstance(context).getProxies() == vm.getProxies())
-                    + ", ctxApp=" + System.identityHashCode(context.getApplicationContext())
-                    + ", actApp=" + System.identityHashCode(activity.getApplication())
-                    + ", recyclerVis=" + recycler.getVisibility() + ")", adapter.getItemCount() > 0);
+            assertTrue("Adapter should display proxy before clicking Test All", adapter.getItemCount() > 0);
 
             String targetAddress = "127.0.0.1:" + closedPort;
             boolean foundUntestedDotBeforeTest = false;
@@ -281,20 +267,27 @@ public class ProxyFailureInspectionTest {
 
             boolean foundExpectedErrorBadge = false;
             String expectedErrorBadge = activity.getString(R.string.filter_error);
-            for (int i = 0; i < adapter.getItemCount(); i++) {
-                RecyclerView.ViewHolder vh = adapter.onCreateViewHolder(recycler, adapter.getItemViewType(i));
-                adapter.onBindViewHolder(vh, i);
-                TextView tvAddress = vh.itemView.findViewById(R.id.tv_proxy_address);
-                View untestedDot = vh.itemView.findViewById(R.id.view_untested_dot);
-                TextView tvStatusBadge = vh.itemView.findViewById(R.id.tv_active_badge);
-                if (tvAddress != null && tvAddress.getText().toString().contains(targetAddress)) {
-                    assertNotNull(untestedDot);
-                    assertEquals(View.GONE, untestedDot.getVisibility());
-                    assertNotNull(tvStatusBadge);
-                    assertEquals(View.VISIBLE, tvStatusBadge.getVisibility());
-                    assertEquals(expectedErrorBadge, tvStatusBadge.getText().toString());
-                    foundExpectedErrorBadge = true;
-                    break;
+            for (int attempt = 0; attempt < 40 && !foundExpectedErrorBadge; attempt++) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                for (int i = 0; i < adapter.getItemCount(); i++) {
+                    RecyclerView.ViewHolder vh = adapter.onCreateViewHolder(recycler, adapter.getItemViewType(i));
+                    adapter.onBindViewHolder(vh, i);
+                    TextView tvAddress = vh.itemView.findViewById(R.id.tv_proxy_address);
+                    View untestedDot = vh.itemView.findViewById(R.id.view_untested_dot);
+                    TextView tvStatusBadge = vh.itemView.findViewById(R.id.tv_active_badge);
+                    if (tvAddress != null && tvAddress.getText().toString().contains(targetAddress)) {
+                        if (untestedDot != null && untestedDot.getVisibility() == View.GONE) {
+                            assertNotNull(tvStatusBadge);
+                            assertEquals(View.VISIBLE, tvStatusBadge.getVisibility());
+                            assertEquals(expectedErrorBadge, tvStatusBadge.getText().toString());
+                            foundExpectedErrorBadge = true;
+                        }
+                        break;
+                    }
+                }
+                if (!foundExpectedErrorBadge) {
+                    Thread.sleep(25);
+                    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(25));
                 }
             }
             assertTrue("Expected card Error badge after failure", foundExpectedErrorBadge);

@@ -537,6 +537,8 @@
 
     <string name="msg_firestore_permission_denied">Không có quyền truy cập dữ liệu Firebase</string>
     <string name="msg_firestore_unavailable">Không thể kết nối Firebase, vui lòng thử lại</string>
+    <string name="msg_firestore_timeout">Kết nối tới Firebase quá thời gian chờ, vui lòng thử lại</string>
+    <string name="msg_sync_no_network">Không có kết nối Internet. Vui lòng kiểm tra Wi-Fi hoặc dữ liệu di động và thử lại</string>
     <string name="msg_firestore_quota_exceeded">Đã vượt giới hạn truy cập Firebase hôm nay</string>
     <string name="msg_firestore_generic_error">Lỗi đồng bộ dữ liệu Firebase</string>
 
@@ -568,4 +570,17 @@
     <string name="label_account_uid">UID: %1$s</string>
     <string name="action_copy_uid">Sao chép UID</string>
     <string name="msg_uid_copied">Đã sao chép UID: %1$s</string>
+
+    <!-- Admin AdMob Control -->
+    <string name="admin_ads_title">Quản lý quảng cáo (AdMob)</string>
+    <string name="admin_ads_desc">Bật hoặc tắt Banner và App Open Ads cho toàn bộ người dùng qua Firestore (/app_config/ads). Chỉ Admin đang hoạt động mới có quyền thay đổi.</string>
+    <string name="admin_ads_switch_label">Hiển thị quảng cáo trong ứng dụng</string>
+    <string name="admin_ads_status_on">ĐANG BẬT</string>
+    <string name="admin_ads_status_off">ĐANG TẮT</string>
+    <string name="admin_ads_meta_on">Quảng cáo đang hiển thị với người dùng (ads_enabled = true)</string>
+    <string name="admin_ads_meta_off">Đã tắt toàn bộ quảng cáo trong ứng dụng (ads_enabled = false)</string>
+    <string name="admin_ads_updating">Đang cập nhật cấu hình lên Firebase…</string>
+    <string name="msg_admin_ads_enabled">Đã bật quảng cáo cho toàn bộ ứng dụng</string>
+    <string name="msg_admin_ads_disabled">Đã tắt quảng cáo cho toàn bộ ứng dụng</string>
+    <string name="msg_admin_ads_update_failed">Không thể cập nhật trạng thái quảng cáo: %1$s</string>
 </resources>

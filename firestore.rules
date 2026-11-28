@@ -22,14 +22,43 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Explicit Admin UIDs and verified owner email configured for TopProxy Admin Dashboard
+    // Firestore-based RBAC: roles/{uid} with role == 'admin' and active == true
+    function roleDocPath() {
+      return /databases/$(database)/documents/roles/$(request.auth.uid);
+    }
+
+    function hasActiveRoleDoc() {
+      return isSignedIn() &&
+             exists(roleDocPath()) &&
+             ('active' in get(roleDocPath()).data) &&
+             get(roleDocPath()).data.active == true;
+    }
+
+    function roleData() {
+      return get(roleDocPath()).data;
+    }
+
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.uid in ['xuonHbFXXrPQEJVZPjyJy9itC7x1', 'jACOpeQtRie82vw5S20AUWfZxD53'] ||
-        (request.auth.token.email_verified == true &&
-         request.auth.token.email is string &&
-         request.auth.token.email.lower() in ['resetall1st@gmail.com'])
+      return hasActiveRoleDoc() &&
+             ('role' in roleData()) &&
+             roleData().role == 'admin';
+    }
+
+    function hasPermission(perm) {
+      return isAdmin() || (
+        hasActiveRoleDoc() &&
+        'permissions' in roleData() &&
+        roleData().permissions is list &&
+        perm in roleData().permissions
       );
+    }
+
+    function isValidAdsConfig(data) {
+      return data.keys().hasAll(['ads_enabled']) &&
+             data.keys().hasOnly(['ads_enabled', 'updatedAt', 'updatedBy']) &&
+             data.ads_enabled is bool &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
+             (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy == request.auth.uid));
     }
 
     function isValidUserSyncSummary(data, userId) {
@@ -95,8 +124,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
-      allow list: if isAdmin();
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || hasPermission('admin.users.list'));
+      allow list: if hasPermission('admin.users.list');
 
       allow create: if isSignedIn() &&
                        isValidId(userId) &&
@@ -199,8 +228,8 @@ service cloud.firestore {
     }
 
     match /sync_events/{eventId} {
-      allow get: if isSignedIn() && isValidId(eventId) && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow get: if isSignedIn() && isValidId(eventId) && (existing().userId == request.auth.uid || hasPermission('admin.sync_events.list'));
+      allow list: if hasPermission('admin.sync_events.list') || (isSignedIn() && existing().userId == request.auth.uid);
 
       allow create: if isSignedIn() &&
                        isValidId(eventId) &&
@@ -215,6 +244,27 @@ service cloud.firestore {
                        isValidSyncEvent(incoming());
 
       allow update, delete: if false;
+    }
+
+    // Quản lý danh sách Admin (chỉ Admin có role == 'admin' && active == true được đọc; không cho client ghi)
+    match /roles/{uid} {
+      allow get: if isValidId(uid) && isAdmin();
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // Cấu hình ứng dụng & bật/tắt quảng cáo (/app_config/ads)
+    match /app_config/{configId} {
+      // Người dùng đã đăng nhập được đọc cấu hình quảng cáo
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if isSignedIn();
+
+      // Chỉ Admin được thay đổi cấu hình quảng cáo hợp lệ
+      allow create, update: if isSignedIn() &&
+                               configId == 'ads' &&
+                               isValidAdsConfig(incoming()) &&
+                               isAdmin();
+      allow delete: if false;
     }
   }
 }

@@ -271,6 +271,74 @@
         "appVersion",
         "createdAt"
       ]
+    },
+    "UserRole": {
+      "title": "UserRole",
+      "description": "Firestore-backed RBAC role and active status for a Firebase user.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["admin", "moderator", "viewer", "user"],
+          "description": "Assigned RBAC role (admin required for privileged access)."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether this RBAC role assignment is currently active."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Optional Firebase Auth UID matching the document ID."
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional granular RBAC permissions."
+        },
+        "assignedBy": {
+          "type": "string",
+          "description": "Optional UID or operator identifier that granted the role."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional server timestamp when the role record was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional server timestamp when the role record was last updated."
+        }
+      },
+      "required": [
+        "role",
+        "active"
+      ]
+    },
+    "AdsConfig": {
+      "title": "AdsConfig",
+      "description": "Global AdMob enable/disable configuration stored at /app_config/ads.",
+      "type": "object",
+      "properties": {
+        "ads_enabled": {
+          "type": "boolean",
+          "description": "Whether ads (Banner and App Open Ads) are enabled across the app."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest ads configuration update."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Firebase UID of the admin who updated the ads configuration."
+        }
+      },
+      "required": [
+        "ads_enabled"
+      ]
     }
   },
   "firestore": {
@@ -297,6 +365,18 @@
         "$ref": "#/entities/SyncEvent"
       },
       "description": "Immutable sync activity records queried by admins for Firebase statistics."
+    },
+    "/roles/{uid}": {
+      "schema": {
+        "$ref": "#/entities/UserRole"
+      },
+      "description": "Firestore-backed RBAC roles (role == 'admin' and active == true)."
+    },
+    "/app_config/{configId}": {
+      "schema": {
+        "$ref": "#/entities/AdsConfig"
+      },
+      "description": "Global application configuration documents such as /app_config/ads."
     }
   }
 }

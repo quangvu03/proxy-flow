@@ -9,21 +9,28 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.example.R;
+import com.example.ads.AdsConfigManager;
 import com.example.auth.AdminConfig;
 import com.example.auth.GoogleAuthManager;
+import android.text.TextUtils;
+
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Fetches live Firebase Firestore statistics for authorized Admin users.
@@ -147,6 +154,7 @@ public final class AdminStatsRepository {
         private final long fetchedAtMs;
         private final List<UserStatsItem> users;
         private final List<SyncEventItem> recentSyncEvents;
+        private final boolean adsEnabled;
 
         public AdminDashboardData(
                 int totalUsers,
@@ -160,6 +168,24 @@ public final class AdminStatsRepository {
                 long fetchedAtMs,
                 List<UserStatsItem> users,
                 List<SyncEventItem> recentSyncEvents) {
+            this(totalUsers, activeUsers24h, totalSyncedProxies, totalWorkingProxies, totalSyncRuns,
+                    firewallEnabledUsers, privateRoutingUsers, syncEvents24h, fetchedAtMs,
+                    users, recentSyncEvents, true);
+        }
+
+        public AdminDashboardData(
+                int totalUsers,
+                int activeUsers24h,
+                int totalSyncedProxies,
+                int totalWorkingProxies,
+                int totalSyncRuns,
+                int firewallEnabledUsers,
+                int privateRoutingUsers,
+                int syncEvents24h,
+                long fetchedAtMs,
+                List<UserStatsItem> users,
+                List<SyncEventItem> recentSyncEvents,
+                boolean adsEnabled) {
             this.totalUsers = totalUsers;
             this.activeUsers24h = activeUsers24h;
             this.totalSyncedProxies = totalSyncedProxies;
@@ -171,6 +197,7 @@ public final class AdminStatsRepository {
             this.fetchedAtMs = fetchedAtMs;
             this.users = users;
             this.recentSyncEvents = recentSyncEvents;
+            this.adsEnabled = adsEnabled;
         }
 
         public int getTotalUsers() { return totalUsers; }
@@ -184,6 +211,7 @@ public final class AdminStatsRepository {
         public long getFetchedAtMs() { return fetchedAtMs; }
         public List<UserStatsItem> getUsers() { return users; }
         public List<SyncEventItem> getRecentSyncEvents() { return recentSyncEvents; }
+        public boolean isAdsEnabled() { return adsEnabled; }
     }
 
     public interface StatsCallback {
@@ -198,54 +226,250 @@ public final class AdminStatsRepository {
     public static void loadDashboardStats(@NonNull Context context, @NonNull StatsCallback callback) {
         Context appCtx = context.getApplicationContext();
         FirebaseUser currentUser = GoogleAuthManager.getCurrentUser(appCtx);
-        if (!AdminConfig.isAdmin(currentUser)) {
+        if (currentUser == null || TextUtils.isEmpty(currentUser.getUid())) {
+            AdminConfig.clearCache();
             postToMain(() -> callback.onError(appCtx.getString(R.string.msg_admin_access_denied)));
             return;
         }
 
-        FirebaseFirestore db = CloudSyncManager.getFirestore(appCtx);
-        if (db == null) {
-            postToMain(() -> callback.onError(appCtx.getString(R.string.msg_firestore_unavailable)));
-            return;
-        }
-
+        final String currentUid = currentUser.getUid().trim();
         STATS_EXECUTOR.execute(() -> {
-            String currentPath = "users";
+            String currentPath = AdminConfig.COLLECTION_ROLES + "/" + currentUid;
+            FirebaseFirestore db = CloudSyncManager.getFirestore(appCtx);
+            if (db != null) {
+                try {
+                    DocumentSnapshot myRoleDoc = Tasks.await(
+                            db.collection(AdminConfig.COLLECTION_ROLES).document(currentUid).get(),
+                            10L,
+                            TimeUnit.SECONDS
+                    );
+                    AdminConfig.RbacAccess access = AdminConfig.RbacAccess.fromDocument(currentUid, myRoleDoc);
+                    AdminConfig.cacheAccess(access);
+                    if (!access.canAccessAdminDashboard()) {
+                        postToMain(() -> callback.onError(appCtx.getString(R.string.msg_admin_access_denied)));
+                        return;
+                    }
+
+                    currentPath = AdsConfigManager.COLLECTION_APP_CONFIG + "/" + AdsConfigManager.DOC_ADS;
+                    boolean adsEnabled = AdsConfigManager.getInstance(appCtx).isAdsEnabled();
+                    try {
+                        DocumentSnapshot adsDoc = Tasks.await(
+                                db.collection(AdsConfigManager.COLLECTION_APP_CONFIG)
+                                        .document(AdsConfigManager.DOC_ADS)
+                                        .get(),
+                                10L,
+                                TimeUnit.SECONDS
+                        );
+                        if (adsDoc.exists()) {
+                            Boolean rawAds = adsDoc.getBoolean(AdsConfigManager.FIELD_ADS_ENABLED);
+                            if (rawAds != null) {
+                                adsEnabled = rawAds;
+                                AdsConfigManager.getInstance(appCtx).updateFromRemoteSnapshot(adsEnabled);
+                            }
+                        }
+                    } catch (Exception adsReadError) {
+                        if (FirestoreErrorHelper.isTransientRetryable(adsReadError)) {
+                            throw adsReadError;
+                        }
+                        FirestoreErrorHelper.handleFirestoreError(
+                                adsReadError,
+                                FirestoreErrorHelper.OperationType.GET,
+                                currentPath
+                        );
+                    }
+
+                    Map<String, AdminConfig.RbacAccess> rolesByUid = new HashMap<>();
+                    rolesByUid.put(currentUid, access);
+                    List<UserStatsItem> userItems = new ArrayList<>();
+                    List<SyncEventItem> eventItems = new ArrayList<>();
+
+                    try {
+                        if (access.isAdmin()) {
+                            currentPath = AdminConfig.COLLECTION_ROLES;
+                            QuerySnapshot rolesSnapshot = Tasks.await(
+                                    db.collection(AdminConfig.COLLECTION_ROLES).get(),
+                                    10L,
+                                    TimeUnit.SECONDS
+                            );
+                            for (DocumentSnapshot roleDoc : rolesSnapshot.getDocuments()) {
+                                String roleUid = nonNull(roleDoc.getString("userId"), roleDoc.getId());
+                                AdminConfig.RbacAccess parsedRole = AdminConfig.RbacAccess.fromDocument(roleUid, roleDoc);
+                                rolesByUid.put(roleUid, parsedRole);
+                            }
+                        }
+
+                        currentPath = "users";
+                        QuerySnapshot usersSnapshot = Tasks.await(
+                                db.collection("users").get(),
+                                10L,
+                                TimeUnit.SECONDS
+                        );
+                        for (DocumentSnapshot doc : usersSnapshot.getDocuments()) {
+                            String uid = nonNull(doc.getString("userId"), doc.getId());
+                            AdminConfig.RbacAccess userRole = rolesByUid.get(uid);
+                            boolean isDashboardRole = userRole != null && userRole.canAccessAdminDashboard();
+                            userItems.add(parseUserDoc(doc, isDashboardRole));
+                        }
+
+                        currentPath = "sync_events";
+                        QuerySnapshot eventsSnapshot = Tasks.await(
+                                db.collection("sync_events")
+                                        .orderBy("createdAt", Query.Direction.DESCENDING)
+                                        .limit(30)
+                                        .get(),
+                                10L,
+                                TimeUnit.SECONDS
+                        );
+                        for (DocumentSnapshot doc : eventsSnapshot.getDocuments()) {
+                            eventItems.add(parseEventDoc(doc));
+                        }
+                    } catch (Exception telemetryError) {
+                        if (FirestoreErrorHelper.isTransientRetryable(telemetryError)) {
+                            throw telemetryError;
+                        }
+                        FirestoreErrorHelper.handleFirestoreError(
+                                telemetryError,
+                                FirestoreErrorHelper.OperationType.LIST,
+                                currentPath
+                        );
+                    }
+
+                    AdminDashboardData dashboardData = aggregateStats(
+                            userItems,
+                            eventItems,
+                            System.currentTimeMillis(),
+                            adsEnabled
+                    );
+                    postToMain(() -> callback.onLoaded(dashboardData));
+                    return;
+                } catch (Exception e) {
+                    Throwable root = FirestoreErrorHelper.unwrapRootCause(e);
+                    if (root instanceof FirebaseFirestoreException
+                            && ((FirebaseFirestoreException) root).getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                        AdminConfig.clearCache();
+                        postToMain(() -> callback.onError(appCtx.getString(R.string.msg_admin_access_denied)));
+                        return;
+                    }
+                    if (!FirestoreErrorHelper.isTransientRetryable(e)) {
+                        FirestoreErrorHelper.handleFirestoreError(
+                                e,
+                                FirestoreErrorHelper.OperationType.GET,
+                                currentPath
+                        );
+                        String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, e);
+                        postToMain(() -> callback.onError(friendly));
+                        return;
+                    }
+                }
+            }
+
+            loadDashboardStatsViaRest(appCtx, currentUser, currentUid, callback);
+        });
+    }
+
+    private static void loadDashboardStatsViaRest(
+            @NonNull Context appCtx,
+            @NonNull FirebaseUser currentUser,
+            @NonNull String currentUid,
+            @NonNull StatsCallback callback) {
+        String currentPath = AdminConfig.COLLECTION_ROLES + "/" + currentUid;
+        try {
+            FirestoreRestClient.RestDocument myRoleDoc =
+                    FirestoreRestClient.getDocument(appCtx, currentUser, currentPath);
+            AdminConfig.RbacAccess access = AdminConfig.RbacAccess.fromRestDocument(currentUid, myRoleDoc);
+            AdminConfig.cacheAccess(access);
+            if (!access.canAccessAdminDashboard()) {
+                postToMain(() -> callback.onError(appCtx.getString(R.string.msg_admin_access_denied)));
+                return;
+            }
+
+            currentPath = AdsConfigManager.COLLECTION_APP_CONFIG + "/" + AdsConfigManager.DOC_ADS;
+            boolean adsEnabled = AdsConfigManager.getInstance(appCtx).isAdsEnabled();
             try {
-                QuerySnapshot usersSnapshot = Tasks.await(db.collection("users").get());
-                List<UserStatsItem> userItems = new ArrayList<>();
-                for (DocumentSnapshot doc : usersSnapshot.getDocuments()) {
-                    userItems.add(parseUserDoc(doc));
+                FirestoreRestClient.RestDocument adsDoc =
+                        FirestoreRestClient.getDocument(appCtx, currentUser, currentPath);
+                if (adsDoc.exists()) {
+                    Boolean rawAds = adsDoc.getBoolean(AdsConfigManager.FIELD_ADS_ENABLED);
+                    if (rawAds != null) {
+                        adsEnabled = rawAds;
+                        AdsConfigManager.getInstance(appCtx).updateFromRemoteSnapshot(adsEnabled);
+                    }
+                }
+            } catch (Exception adsReadError) {
+                FirestoreErrorHelper.handleFirestoreError(
+                        adsReadError,
+                        FirestoreErrorHelper.OperationType.GET,
+                        currentPath
+                );
+            }
+
+            Map<String, AdminConfig.RbacAccess> rolesByUid = new HashMap<>();
+            rolesByUid.put(currentUid, access);
+            List<UserStatsItem> userItems = new ArrayList<>();
+            List<SyncEventItem> eventItems = new ArrayList<>();
+
+            try {
+                if (access.isAdmin()) {
+                    currentPath = AdminConfig.COLLECTION_ROLES;
+                    List<FirestoreRestClient.RestDocument> roleDocs =
+                            FirestoreRestClient.listDocuments(appCtx, currentUser, currentPath);
+                    for (FirestoreRestClient.RestDocument roleDoc : roleDocs) {
+                        String roleUid = nonNull(roleDoc.getString("userId"), roleDoc.getId());
+                        rolesByUid.put(roleUid, AdminConfig.RbacAccess.fromRestDocument(roleUid, roleDoc));
+                    }
+                }
+
+                currentPath = "users";
+                List<FirestoreRestClient.RestDocument> userDocs =
+                        FirestoreRestClient.listDocuments(appCtx, currentUser, currentPath);
+                for (FirestoreRestClient.RestDocument doc : userDocs) {
+                    String uid = nonNull(doc.getString("userId"), doc.getId());
+                    AdminConfig.RbacAccess userRole = rolesByUid.get(uid);
+                    boolean isDashboardRole = userRole != null && userRole.canAccessAdminDashboard();
+                    userItems.add(parseUserDocFromRest(doc, isDashboardRole));
                 }
 
                 currentPath = "sync_events";
-                QuerySnapshot eventsSnapshot = Tasks.await(
-                        db.collection("sync_events")
-                                .orderBy("createdAt", Query.Direction.DESCENDING)
-                                .limit(30)
-                                .get()
-                );
-                List<SyncEventItem> eventItems = new ArrayList<>();
-                for (DocumentSnapshot doc : eventsSnapshot.getDocuments()) {
-                    eventItems.add(parseEventDoc(doc));
+                List<FirestoreRestClient.RestDocument> eventDocs =
+                        FirestoreRestClient.listDocuments(appCtx, currentUser, currentPath);
+                for (FirestoreRestClient.RestDocument doc : eventDocs) {
+                    eventItems.add(parseEventDocFromRest(doc));
                 }
-
-                AdminDashboardData dashboardData = aggregateStats(
-                        userItems,
-                        eventItems,
-                        System.currentTimeMillis()
-                );
-                postToMain(() -> callback.onLoaded(dashboardData));
-            } catch (Exception e) {
+                Collections.sort(eventItems, (a, b) -> Long.compare(b.getCreatedAtMs(), a.getCreatedAtMs()));
+                if (eventItems.size() > 30) {
+                    eventItems = new ArrayList<>(eventItems.subList(0, 30));
+                }
+            } catch (Exception telemetryError) {
                 FirestoreErrorHelper.handleFirestoreError(
-                        e,
+                        telemetryError,
                         FirestoreErrorHelper.OperationType.LIST,
                         currentPath
                 );
-                String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, e);
-                postToMain(() -> callback.onError(friendly));
             }
-        });
+
+            AdminDashboardData dashboardData = aggregateStats(
+                    userItems,
+                    eventItems,
+                    System.currentTimeMillis(),
+                    adsEnabled
+            );
+            postToMain(() -> callback.onLoaded(dashboardData));
+        } catch (Exception restErr) {
+            Throwable root = FirestoreErrorHelper.unwrapRootCause(restErr);
+            if (root instanceof FirebaseFirestoreException
+                    && ((FirebaseFirestoreException) root).getCode() == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                AdminConfig.clearCache();
+                postToMain(() -> callback.onError(appCtx.getString(R.string.msg_admin_access_denied)));
+                return;
+            }
+            FirestoreErrorHelper.handleFirestoreError(
+                    restErr,
+                    FirestoreErrorHelper.OperationType.GET,
+                    currentPath
+            );
+            String friendly = FirestoreErrorHelper.getFriendlyErrorMessage(appCtx, restErr);
+            postToMain(() -> callback.onError(friendly));
+        }
     }
 
     @VisibleForTesting
@@ -254,6 +478,16 @@ public final class AdminStatsRepository {
             @NonNull List<UserStatsItem> users,
             @NonNull List<SyncEventItem> events,
             long nowMs) {
+        return aggregateStats(users, events, nowMs, true);
+    }
+
+    @VisibleForTesting
+    @NonNull
+    public static AdminDashboardData aggregateStats(
+            @NonNull List<UserStatsItem> users,
+            @NonNull List<SyncEventItem> events,
+            long nowMs,
+            boolean adsEnabled) {
         long cutoff24h = nowMs - DAY_MS;
 
         int active24h = 0;
@@ -302,11 +536,12 @@ public final class AdminStatsRepository {
                 syncEvents24h,
                 nowMs,
                 Collections.unmodifiableList(sortedUsers),
-                Collections.unmodifiableList(sortedEvents)
+                Collections.unmodifiableList(sortedEvents),
+                adsEnabled
         );
     }
 
-    private static UserStatsItem parseUserDoc(@NonNull DocumentSnapshot doc) {
+    private static UserStatsItem parseUserDoc(@NonNull DocumentSnapshot doc, boolean isDashboardAdmin) {
         String uid = nonNull(doc.getString("userId"), doc.getId());
         String displayName = nonNull(doc.getString("displayName"), "User");
         String email = nonNull(doc.getString("email"), "");
@@ -334,7 +569,7 @@ public final class AdminStatsRepository {
                 device,
                 appVersion,
                 lastActiveMs,
-                AdminConfig.isAdmin(uid, email, true)
+                isDashboardAdmin
         );
     }
 
@@ -348,6 +583,53 @@ public final class AdminStatsRepository {
                 getInt(doc, "totalProxies"),
                 nonNull(doc.getString("appVersion"), ""),
                 getTimestampMs(doc, "createdAt")
+        );
+    }
+
+    private static UserStatsItem parseUserDocFromRest(
+            @NonNull FirestoreRestClient.RestDocument doc,
+            boolean isDashboardAdmin) {
+        String uid = nonNull(doc.getString("userId"), doc.getId());
+        String displayName = nonNull(doc.getString("displayName"), "User");
+        String email = nonNull(doc.getString("email"), "");
+        int proxyCount = doc.getInt("proxyCount");
+        int workingCount = doc.getInt("workingProxyCount");
+        int syncCount = doc.getInt("syncCount");
+        boolean firewall = Boolean.TRUE.equals(doc.getBoolean("firewallEnabled"));
+        boolean privateRouting = Boolean.TRUE.equals(doc.getBoolean("privateRoutingEnabled"));
+        String device = nonNull(doc.getString("lastDeviceModel"), "");
+        String appVersion = nonNull(doc.getString("appVersion"), "");
+
+        long lastSyncMs = doc.getTimestampMs("lastSyncAt");
+        long updatedMs = doc.getTimestampMs("updatedAt");
+        long lastActiveMs = Math.max(lastSyncMs, updatedMs);
+
+        return new UserStatsItem(
+                uid,
+                displayName,
+                email,
+                proxyCount,
+                workingCount,
+                syncCount,
+                firewall,
+                privateRouting,
+                device,
+                appVersion,
+                lastActiveMs,
+                isDashboardAdmin
+        );
+    }
+
+    private static SyncEventItem parseEventDocFromRest(@NonNull FirestoreRestClient.RestDocument doc) {
+        return new SyncEventItem(
+                doc.getId(),
+                nonNull(doc.getString("userLabel"), "User"),
+                nonNull(doc.getString("deviceModel"), ""),
+                doc.getInt("uploadedProxies"),
+                doc.getInt("downloadedProxies"),
+                doc.getInt("totalProxies"),
+                nonNull(doc.getString("appVersion"), ""),
+                doc.getTimestampMs("createdAt")
         );
     }
 
